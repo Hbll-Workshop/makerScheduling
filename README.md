@@ -80,6 +80,39 @@ use **Save backup file** in one and **Open backup file** in the other.
 
 The icon is `build/icon.svg`; `icon.png` and `icon.ico` are rendered from it.
 
+## Hosting (Cloudflare Pages)
+
+The web app is static files, so it's hosted on Cloudflare Pages straight from `dist/`, with
+Cloudflare Access in front so only approved people can open it. Routing uses URL hashes, so no
+server rewrite rules are needed.
+
+**Deploy** (from whichever machine owns the Cloudflare account):
+
+```bash
+npm install
+npx wrangler login   # once per machine; opens a browser, click Allow
+npm run deploy       # build, then upload dist/ to the "schedule-maker" Pages project
+```
+
+The first deploy creates the project, live at `https://schedule-maker.pages.dev`. Each later
+deploy is the same `npm run deploy`. Deploys go straight from that machine to Cloudflare;
+GitHub isn't involved.
+
+**Restrict access** right after the first deploy — until then the site is public. In the
+Cloudflare dashboard:
+
+1. **Zero Trust** → choose a team name and the **Free** plan (up to 50 users).
+2. **Access → Applications → Add an application → Self-hosted**.
+3. Add two hostnames: `schedule-maker.pages.dev` and `*.schedule-maker.pages.dev` (the second
+   covers each deploy's preview URL).
+4. Add an **Allow** policy. **Emails** (a one-time code by email, then remembered for the
+   session length you set) is the robust choice; **IP ranges** works only if the computers'
+   public IPs never change.
+5. Open the site in a private window and check it asks you to sign in.
+
+Each browser keeps its own autosave (`localStorage`), so two computers using the hosted site
+don't share data. Move a project across with **Save backup file** / **Open backup file**.
+
 ## Time off and pins
 
 Availability describes a person's *usual* week. Time off and pins are tied to **calendar dates**
