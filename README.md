@@ -94,7 +94,8 @@ npx wrangler login   # once per machine; opens a browser, click Allow
 npm run deploy       # build, then upload dist/ to the "schedule-maker" Pages project
 ```
 
-The first deploy creates the project, live at `https://schedule-maker.pages.dev`. Each later
+The first deploy creates the project (set its production branch to `main` when asked), live at
+`https://schedule-maker-6de.pages.dev`. Each later
 deploy is the same `npm run deploy`. Deploys go straight from that machine to Cloudflare;
 GitHub isn't involved.
 
@@ -103,7 +104,7 @@ Cloudflare dashboard:
 
 1. **Zero Trust** → choose a team name and the **Free** plan (up to 50 users).
 2. **Access → Applications → Add an application → Self-hosted**.
-3. Add two hostnames: `schedule-maker.pages.dev` and `*.schedule-maker.pages.dev` (the second
+3. Add two hostnames: `schedule-maker-6de.pages.dev` and `*.schedule-maker-6de.pages.dev` (the second
    covers each deploy's preview URL).
 4. Add an **Allow** policy. **Emails** (a one-time code by email, then remembered for the
    session length you set) is the robust choice; **IP ranges** works only if the computers'
