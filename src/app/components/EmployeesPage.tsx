@@ -1,5 +1,5 @@
 import { formatWeekRange } from '../../core/calendar'
-import { initials, weekNote } from '../people'
+import { colorSlots, initials, personClass, weekNote } from '../people'
 import { excludedFor, newEmployee, setWorking, workingEmployees, type Project, type ProjectUpdate } from '../project'
 import type { Route } from '../routes'
 import { Callout } from './ui/Callout'
@@ -20,6 +20,7 @@ export function EmployeesPage({ project, update, navigate, newWeek, onDismissNew
   const out = new Set(excludedFor(project, project.weekStart))
   const working = workingEmployees(project).length
   const week = formatWeekRange(project.weekStart)
+  const slots = colorSlots(project, project.employees.map((e) => e.id))
 
   const add = () => {
     const employee = newEmployee(project)
@@ -59,7 +60,7 @@ export function EmployeesPage({ project, update, navigate, newWeek, onDismissNew
         ) : (
           <>
             <ul className="people-list">
-              {project.employees.map((e) => {
+              {project.employees.map((e, i) => {
                 const isWorking = !out.has(e.id)
                 const note = weekNote(project, e)
                 return (
@@ -71,7 +72,7 @@ export function EmployeesPage({ project, update, navigate, newWeek, onDismissNew
                         aria-label={`${e.name || 'Unnamed'} is working this week`}
                         onChange={(event) => update((p) => setWorking(p, e.id, event.target.checked))}
                       />
-                      <span className="avatar" aria-hidden="true">{initials(e.name)}</span>
+                      <span className={`avatar ${personClass(slots[i])}`} aria-hidden="true">{initials(e.name)}</span>
                       <span className="people-text">
                         <span className="people-name">{e.name || 'Unnamed'}</span>
                         <span className="people-meta">

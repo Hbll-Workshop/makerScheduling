@@ -1,25 +1,26 @@
 /* Tokens. Light is the base; dark redefines the same roles.
-   Chrome is neutral with one indigo accent. Data colors are kept apart from it and follow the
+   "Pinboard": a cool blue-grey canvas with white, softly rounded panels and one teal accent;
+   Bricolage Grotesque for headings, Figtree for everything else. Data colors are kept apart from it and follow the
    dataviz reference palette: categorical blue/orange for availability, a single-hue blue ramp for
    headcount magnitude, and its eight categorical hues, in its order, for people. */
 :root {
   color-scheme: light;
 
-  --bg: #f7f7f8;
+  --bg: #eef3f5;
   --surface: #ffffff;
-  --surface-2: #f3f3f5;
-  --surface-3: #e9e9ed;
-  --border: #e5e5ea;
-  --border-strong: #d1d1d8;
-  --text: #18181b;
-  --text-2: #55555e;
-  --text-3: #8b8b94;
+  --surface-2: #f3f7f8;
+  --surface-3: #e4ecef;
+  --border: #dde6ea;
+  --border-strong: #c5d2d8;
+  --text: #1d2a33;
+  --text-2: #4f636e;
+  --text-3: #7f929c;
 
-  --ink: #18181b;
+  --ink: #0b7a74;
   --on-ink: #ffffff;
-  --accent: #5b5bd6;
-  --accent-soft: #eeeefc;
-  --accent-text: #4646c0;
+  --accent: #0e8a83;
+  --accent-soft: #d8f0ee;
+  --accent-text: #0a6b65;
 
   --good: #1f9d55;
   --good-soft: #e9f7ef;
@@ -33,7 +34,7 @@
 
   --avail-preferred: #2a78d6;
   --avail-not-preferred: #eb6834;
-  --avail-unavailable: #efeff2;
+  --avail-unavailable: #e9eff2;
 
   --seq-1: #cde2fb;
   --seq-2: #9ec5f4;
@@ -59,19 +60,22 @@
   --s-6: 24px;
   --s-8: 32px;
 
-  --r-sm: 4px;
-  --r: 6px;
-  --r-lg: 10px;
-  --shadow-sm: 0 1px 2px rgba(16, 16, 24, 0.05);
-  --shadow-md: 0 4px 12px rgba(16, 16, 24, 0.08), 0 1px 3px rgba(16, 16, 24, 0.06);
-  --shadow-lg: 0 16px 48px rgba(16, 16, 24, 0.18), 0 2px 6px rgba(16, 16, 24, 0.08);
-  --control-h: 32px;
-  --topbar-bg: rgba(255, 255, 255, 0.85);
+  --r-sm: 6px;
+  --r: 10px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --shadow-sm: 0 1px 2px rgba(20, 40, 50, 0.06);
+  --shadow-md: 0 6px 16px rgba(20, 40, 50, 0.08), 0 1px 3px rgba(20, 40, 50, 0.06);
+  --shadow-lg: 0 18px 48px rgba(20, 40, 50, 0.18), 0 2px 6px rgba(20, 40, 50, 0.08);
+  --control-h: 34px;
+  --sidebar-w: 264px;
 
-  font-family: Inter, 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', 'Figtree Variable', system-ui, sans-serif;
+  --font-body: 'Figtree Variable', Figtree, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  font-family: var(--font-body);
   font-size: 14px;
   line-height: 1.45;
-  font-feature-settings: 'cv11', 'ss01';
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
@@ -81,21 +85,21 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --bg: #0e0e10;
-  --surface: #161619;
-  --surface-2: #1e1e22;
-  --surface-3: #27272c;
-  --border: #28282e;
-  --border-strong: #3a3a42;
-  --text: #ececf0;
-  --text-2: #b1b1ba;
-  --text-3: #7c7c86;
+  --bg: #0e1518;
+  --surface: #162024;
+  --surface-2: #1c282d;
+  --surface-3: #253339;
+  --border: #24323a;
+  --border-strong: #34454e;
+  --text: #e5eef1;
+  --text-2: #a5b6be;
+  --text-3: #71858f;
 
-  --ink: #ececf0;
-  --on-ink: #161619;
-  --accent: #8b8cf0;
-  --accent-soft: rgba(139, 140, 240, 0.14);
-  --accent-text: #a9aaf6;
+  --ink: #2fb8ac;
+  --on-ink: #06201e;
+  --accent: #2fb8ac;
+  --accent-soft: rgba(47, 184, 172, 0.15);
+  --accent-text: #63d3c9;
 
   --good: #34b26a;
   --good-soft: rgba(52, 178, 106, 0.13);
@@ -109,7 +113,7 @@
 
   --avail-preferred: #3987e5;
   --avail-not-preferred: #d95926;
-  --avail-unavailable: #26262b;
+  --avail-unavailable: #223036;
 
   --seq-1: #104281;
   --seq-2: #1c5cab;
@@ -130,7 +134,6 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
-  --topbar-bg: rgba(22, 22, 25, 0.85);
 }
 
 /* ---------- Base ---------- */
@@ -138,6 +141,7 @@
 body { margin: 0; background: var(--bg); }
 button, input, select, textarea { font: inherit; color: inherit; }
 h1, h2, h3, h4 { margin: 0; line-height: 1.25; font-weight: 600; }
+.page-title, .card-title, .modal-title, .schedule-title, .workspace-title, .brand-name { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.01em; }
 p { margin: 0; }
 svg.icon { flex: none; display: block; }
 
@@ -154,63 +158,91 @@ svg.icon { flex: none; display: block; }
 }
 
 /* ---------- Shell ---------- */
-.topbar {
-  position: sticky; top: 0; z-index: 20;
-  background: var(--topbar-bg); border-bottom: 1px solid var(--border);
-  backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px);
-}
-.topbar-inner, .page { max-width: 1240px; margin: 0 auto; padding-inline: var(--s-5); }
-.topbar-row { display: flex; align-items: center; gap: var(--s-2); min-height: 52px; }
+/* Two panes: a floating sidebar (steps, team, project actions) and the workspace beside it. */
+.shell { display: flex; align-items: flex-start; gap: var(--s-4); padding: var(--s-4); min-height: 100vh; }
 
-.brand { display: flex; align-items: center; gap: var(--s-2); font-weight: 600; white-space: nowrap; }
+.sidebar {
+  position: sticky; top: var(--s-4); flex: none; width: var(--sidebar-w);
+  height: calc(100vh - 2 * var(--s-4)); display: flex; flex-direction: column; gap: var(--s-4);
+  padding: 18px 14px 12px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-xl); box-shadow: var(--shadow-sm);
+}
+.brand { display: flex; align-items: center; gap: 10px; padding-inline: 4px; white-space: nowrap; }
 .brand-mark {
-  width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center;
-  background: var(--ink); color: var(--on-ink);
+  width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; flex: none;
+  background: var(--accent); color: var(--on-ink);
 }
-.crumb-sep { color: var(--border-strong); font-size: 18px; font-weight: 300; margin-inline: 2px; }
+.brand-name { font-size: 18px; }
 input[type='text'].project-name {
-  min-width: 4rem; width: 100%; max-width: 22rem; flex: 0 1 22rem;
-  border: 1px solid transparent; background: transparent; border-radius: var(--r);
-  padding: 4px 8px; font-weight: 500; text-overflow: ellipsis;
+  width: 100%; height: 32px; border: 1px solid transparent; background: var(--surface-2); border-radius: var(--r);
+  padding: 0 10px; font-weight: 500; text-overflow: ellipsis; color: var(--text-2);
 }
-input[type='text'].project-name:hover { background: var(--surface-2); }
-input[type='text'].project-name:focus { background: var(--surface); border-color: var(--border-strong); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+input[type='text'].project-name:hover { border-color: var(--border-strong); }
+input[type='text'].project-name:focus { background: var(--surface); color: var(--text); border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
 
-.save-status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.sidebar-foot { display: flex; align-items: center; gap: 2px; margin-top: auto; padding-top: var(--s-3); border-top: 1px solid var(--border); }
+/* The menu sits at the bottom of the screen, so it opens upwards. */
+.sidebar-foot .menu { top: auto; bottom: calc(100% + 6px); }
+.save-status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-3); white-space: nowrap; padding-left: 4px; }
 
-/* Step trail and week switcher share the second row of the top bar. */
-.topbar-steps { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2) var(--s-4); padding-bottom: 10px; }
-
-.stepper ol { list-style: none; margin: 0; padding: 0; display: flex; align-items: center; }
-.step { display: flex; align-items: center; }
-.step + .step::before { content: ''; width: 20px; height: 1px; background: var(--border-strong); margin-inline: 2px; }
-.step--done + .step::before { background: var(--accent); }
+/* Steps, stacked. */
+.stepper ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.step { display: flex; }
 .step-button {
-  position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px 4px 4px;
-  border: none; background: none; border-radius: 999px; cursor: pointer; color: var(--text-2); font-weight: 500; white-space: nowrap;
+  position: relative; flex: 1; display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  border: none; background: none; border-radius: 12px; cursor: pointer; color: var(--text-2); font-weight: 500; white-space: nowrap; text-align: left;
 }
 .step-button:hover { background: var(--surface-2); color: var(--text); }
 .step-marker {
-  width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex: none;
-  font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums;
-  border: 1.5px solid var(--border-strong); color: var(--text-2); background: var(--surface);
+  width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+  background: var(--surface-2); color: var(--text-3); border: 1px solid var(--border);
 }
 .step--done .step-marker { background: var(--accent-soft); border-color: transparent; color: var(--accent-text); }
-.step.is-current .step-button { color: var(--text); }
-.step.is-current .step-marker { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
-.step-alert { position: absolute; top: 3px; left: 20px; width: 8px; height: 8px; border-radius: 50%; background: var(--critical); box-shadow: 0 0 0 2px var(--surface); }
+.step.is-current .step-button { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+.step.is-current .step-marker { background: var(--accent); border-color: var(--accent); color: var(--on-ink); }
+.step-alert { position: absolute; top: 5px; left: 28px; width: 8px; height: 8px; border-radius: 50%; background: var(--critical); box-shadow: 0 0 0 2px var(--surface); }
+
+/* Team. */
+.team { display: flex; flex-direction: column; gap: 6px; min-height: 0; flex: 1; }
+.team-heading { padding-inline: 6px; }
+.team-empty { padding-inline: 6px; }
+.team-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; overflow-y: auto; min-height: 0; }
+.team-member {
+  width: 100%; display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  padding: 5px 8px 5px 6px; border: none; background: none; border-radius: 12px; cursor: pointer; text-align: left; color: var(--text);
+}
+.team-member:hover { background: var(--surface-2); }
+.team-member[aria-current='page'] { background: var(--accent-soft); }
+.team-avatar {
+  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em;
+  background: color-mix(in srgb, var(--person) 20%, var(--surface));
+  color: color-mix(in srgb, var(--person) 60%, var(--text));
+}
+.team-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.team-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-meta { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.team-hours { width: 44px; height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.team-hours > span { display: block; height: 100%; border-radius: 999px; background: var(--person); }
+.team-member.is-out .team-avatar, .team-member.is-out .team-name { opacity: 0.5; }
+
+/* Workspace. */
+.workspace { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--s-4); max-width: 1240px; }
+.workspace-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); min-height: 44px; padding-inline: 4px; }
+.workspace-title { font-size: 26px; line-height: 1.15; }
 
 .week-switcher { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
 .week-switcher-control {
-  position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 2px;
-  border: 1px solid var(--border); border-radius: var(--r); background: var(--surface);
+  position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-sm);
 }
 .week-switcher-range {
-  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border: none; border-radius: 4px;
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: none; border-radius: 8px;
   background: none; cursor: pointer; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text);
 }
 .week-switcher-range:hover { background: var(--surface-2); }
-.week-switcher-range .icon { color: var(--text-3); }
+.week-switcher-range .icon { color: var(--accent); }
 /* The native picker opens from here; it stays in layout (showPicker needs that) but out of sight. */
 input[type='date'].week-switcher-input {
   position: absolute; left: 50%; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none;
@@ -218,21 +250,29 @@ input[type='date'].week-switcher-input {
 .pill--button { cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 500; }
 .pill--button:hover { filter: brightness(0.97); }
 
+.page { display: flex; flex-direction: column; gap: var(--s-4); padding-bottom: var(--s-4); }
+
 .step-footer {
   position: sticky; bottom: 0; z-index: 10; display: flex; align-items: center; gap: var(--s-2);
   margin-top: var(--s-2); padding: var(--s-3) 0; background: linear-gradient(to bottom, transparent, var(--bg) 30%);
 }
 
-.page { padding-block: var(--s-5) var(--s-8); display: flex; flex-direction: column; gap: var(--s-4); }
-
-@media (max-width: 640px) {
-  .topbar-inner, .page { padding-inline: var(--s-4); }
-  .brand-name, .crumb-sep, .save-status--ok { display: none; }
-  .history-buttons { display: none; }
+/* Narrow screens: the sidebar becomes a block above the page, the steps run across, the team
+   list folds away (it's on the Employees step anyway). */
+@media (max-width: 900px) {
+  .shell { flex-direction: column; align-items: stretch; padding: var(--s-3); gap: var(--s-3); }
+  .sidebar { position: static; width: auto; height: auto; padding: 12px; gap: var(--s-3); }
+  .team { display: none; }
+  .sidebar-foot { margin-top: 0; padding-top: var(--s-2); }
+  .sidebar-foot .menu { top: calc(100% + 4px); bottom: auto; }
+  .stepper ol { flex-direction: row; flex-wrap: wrap; }
+  .step { flex: 1 1 auto; }
+  .workspace-title { font-size: 22px; }
+}
+@media (max-width: 520px) {
   .step-label { display: none; }
   .step.is-current .step-label { display: inline; }
-  .step + .step::before { width: 10px; }
-  .week-switcher-range span { font-size: 13px; }
+  .workspace-head .history-buttons { display: none; }
 }
 
 /* ---------- Buttons ---------- */
@@ -268,7 +308,7 @@ input[type='date'].week-switcher-input {
 }
 .segmented-item {
   display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px;
-  border: none; border-radius: 4px; background: transparent; color: var(--text-2);
+  border: none; border-radius: 8px; background: transparent; color: var(--text-2);
   font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums;
 }
 .segmented-item:hover { color: var(--text); }
@@ -377,7 +417,7 @@ input[type='checkbox'] { accent-color: var(--accent); }
 
 /* ---------- Dialog ---------- */
 dialog.modal {
-  padding: 0; border: 1px solid var(--border); border-radius: 12px; width: min(28rem, calc(100vw - 2rem));
+  padding: 0; border: 1px solid var(--border); border-radius: var(--r-xl); width: min(28rem, calc(100vw - 2rem));
   background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg);
 }
 dialog.modal::backdrop { background: rgba(10, 10, 14, 0.4); }
@@ -385,7 +425,7 @@ dialog.modal::backdrop { background: rgba(10, 10, 14, 0.4); }
 .modal-title { font-size: 16px; }
 .modal-footer {
   display: flex; justify-content: flex-end; gap: var(--s-2); padding: var(--s-3) var(--s-5);
-  border-top: 1px solid var(--border); background: var(--surface-2); border-radius: 0 0 12px 12px;
+  border-top: 1px solid var(--border); background: var(--surface-2); border-radius: 0 0 var(--r-xl) var(--r-xl);
 }
 
 /* ---------- Callouts, pills, stats ---------- */
@@ -539,6 +579,7 @@ dialog.modal::backdrop { background: rgba(10, 10, 14, 0.4); }
   font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em;
   background: var(--surface-3); color: var(--text-2);
 }
+.avatar[class*='person-'] { background: color-mix(in srgb, var(--person) 20%, var(--surface)); color: color-mix(in srgb, var(--person) 60%, var(--text)); }
 .avatar--lg { width: 40px; height: 40px; font-size: 14px; background: var(--ink); color: var(--on-ink); }
 
 .people-list { list-style: none; margin: 0; padding: 0; }
@@ -674,3 +715,51 @@ dialog.modal::backdrop { background: rgba(10, 10, 14, 0.4); }
 .timeline-name { font-weight: 600; }
 .timeline-bar.has-not-preferred { outline: 1.5px dashed var(--person-ink); outline-offset: -3px; }
 .timeline-bar.is-pinned { box-shadow: inset 0 0 0 2px var(--ink); }
+
+/* ---------- Week calendar ---------- */
+/* Days across, hours down. Shifts are placed absolutely inside their day column, one hour = --hour-h. */
+.calendar {
+  --hour-h: 44px;
+  display: grid; grid-template-rows: auto calc(var(--hour-h) * var(--hours));
+  min-width: 48rem; padding: 0 var(--s-3) var(--s-3) 0;
+}
+.calendar-corner { border-bottom: 1px solid var(--border); }
+.calendar-dayhead {
+  display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 10px 4px 8px; border-bottom: 1px solid var(--border);
+}
+.calendar-dayname { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+.calendar-date { font-family: var(--font-display); font-weight: 700; font-size: 20px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.calendar-hours { position: relative; }
+.calendar-hours span {
+  position: absolute; right: 8px; transform: translateY(-50%); font-size: 11px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.calendar-hours span:first-child { transform: none; }
+.calendar-col {
+  position: relative; border-left: 1px solid var(--border);
+  background-image: linear-gradient(var(--border) 1px, transparent 1px); background-size: 100% var(--hour-h);
+}
+.calendar-empty { position: absolute; inset: 12px 0 auto; text-align: center; font-size: 12px; color: var(--text-3); }
+.calendar-shift {
+  position: absolute; overflow: hidden; container-type: inline-size;
+  border-radius: 10px; border-left: 4px solid var(--person);
+  background: color-mix(in srgb, var(--person) 16%, var(--surface));
+}
+.calendar-shift-body { display: flex; flex-direction: column; gap: 1px; padding: 5px 7px; line-height: 1.2; }
+.calendar-shift-name {
+  font-weight: 700; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: color-mix(in srgb, var(--person) 55%, var(--text));
+}
+.calendar-shift-time { font-size: 11.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.calendar-shift-pin { float: right; color: var(--ink); }
+.calendar-shift.has-not-preferred { border: 1.5px dashed var(--person); border-left: 4px solid var(--person); }
+.calendar-shift.is-pinned { box-shadow: inset 0 0 0 2px var(--ink); }
+@container (max-width: 74px) {
+  .calendar-shift-time { display: none; }
+  .calendar-shift-body { padding-inline: 5px; }
+}
+@container (max-width: 46px) {
+  .calendar-shift-body { align-items: center; padding: 6px 0; }
+  .calendar-shift-name { writing-mode: vertical-rl; font-size: 12px; }
+  .calendar-shift-pin { float: none; margin-bottom: 4px; }
+}
+.calendar-shift.person-alt { background-image: repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in srgb, var(--person) 22%, transparent) 4px 6px); }

@@ -10,6 +10,7 @@ import { Callout } from './app/components/ui/Callout'
 import { ConfirmDialog } from './app/components/ui/ConfirmDialog'
 import { Icon, LogoMark } from './app/components/ui/Icon'
 import { Menu } from './app/components/ui/Menu'
+import { TeamPanel } from './app/components/TeamPanel'
 import { WeekSwitcher } from './app/components/WeekSwitcher'
 import { downloadFile } from './app/download'
 import {
@@ -26,7 +27,7 @@ import {
   type ProjectUpdate,
 } from './app/project'
 import { stepOf, stepRoute, useRoute } from './app/routes'
-import { stepStates, type StepId } from './app/steps'
+import { STEPS, stepStates, type StepId } from './app/steps'
 import { useTheme } from './app/theme'
 import { useSolver, type SolvedRun } from './app/useSolver'
 import { useUndoable } from './app/useUndoable'
@@ -162,33 +163,25 @@ export function App() {
 
   return (
     <>
-      <header className="topbar">
-        <div className="topbar-inner">
-          <div className="topbar-row">
-            <div className="brand">
-              <span className="brand-mark"><LogoMark /></span>
-              <span className="brand-name">Schedule Maker</span>
-            </div>
-            <span className="crumb-sep" aria-hidden="true">/</span>
-            <input
-              type="text"
-              className="project-name"
-              aria-label="Project name"
-              value={project.name}
-              onChange={(e) => {
-                const name = e.target.value
-                update((p) => ({ ...p, name }))
-              }}
-            />
-            <span className="spacer" />
-            <div className="btn-group history-buttons">
-              <button type="button" className="btn btn--ghost btn--icon btn--sm" aria-label="Undo" title="Undo (Ctrl+Z)" disabled={!history.canUndo} onClick={undo}>
-                <Icon name="undo" />
-              </button>
-              <button type="button" className="btn btn--ghost btn--icon btn--sm" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled={!history.canRedo} onClick={redo}>
-                <Icon name="redo" />
-              </button>
-            </div>
+      <div className="shell">
+        <aside className="sidebar">
+          <div className="brand">
+            <span className="brand-mark"><LogoMark size={16} /></span>
+            <span className="brand-name">Schedule Maker</span>
+          </div>
+          <input
+            type="text"
+            className="project-name"
+            aria-label="Project name"
+            value={project.name}
+            onChange={(e) => {
+              const name = e.target.value
+              update((p) => ({ ...p, name }))
+            }}
+          />
+          <Stepper current={step} states={states} onSelect={goTo} />
+          <TeamPanel project={project} route={route} navigate={navigate} />
+          <div className="sidebar-foot">
             {saveFailed ? (
               <span className="pill pill--warning" title="This browser isn't saving changes (storage is blocked). Save a backup file to keep your work.">
                 <Icon name="alert" size={12} /> Not saving · save a backup
@@ -198,6 +191,7 @@ export function App() {
                 <Icon name="check" size={12} /> Saved
               </span>
             )}
+            <span className="spacer" />
             <button
               type="button"
               className="btn btn--ghost btn--icon btn--sm"
@@ -238,59 +232,70 @@ export function App() {
             />
             <input ref={fileInput} type="file" accept="application/json,.json" hidden onChange={importFile} />
           </div>
+        </aside>
 
-          <div className="topbar-steps">
-            <Stepper current={step} states={states} onSelect={goTo} />
+        <div className="workspace">
+          <header className="workspace-head">
+            {step && <h1 className="workspace-title">{STEPS.find((s) => s.id === step)?.label}</h1>}
+            <span className="spacer" />
             <WeekSwitcher project={project} update={update} />
+            <div className="btn-group history-buttons">
+              <button type="button" className="btn btn--icon btn--sm" aria-label="Undo" title="Undo (Ctrl+Z)" disabled={!history.canUndo} onClick={undo}>
+                <Icon name="undo" />
+              </button>
+              <button type="button" className="btn btn--icon btn--sm" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled={!history.canRedo} onClick={redo}>
+                <Icon name="redo" />
+              </button>
+            </div>
+          </header>
+
+          <div className="page">
+            {exploringExample && route.page === 'employees' && (
+              <Callout
+                tone="good"
+                title="You're exploring an example café"
+                actions={
+                  <>
+                    <button type="button" className="btn btn--sm btn--primary" onClick={() => setPending({ label: 'a blank project', make: () => projectFromScenario(parseScenario(BLANK)) })}>
+                      Start my own
+                    </button>
+                    <button type="button" className="btn btn--sm" onClick={() => setExploringExample(false)}>Keep exploring</button>
+                  </>
+                }
+              >
+                <p className="hint">
+                  Walk through the four steps above to see how it works. Everything saves in this browser as you go.
+                </p>
+              </Callout>
+            )}
+            {fileError && (
+              <Callout
+                tone="critical"
+                role="alert"
+                title="Couldn't open that file"
+                actions={<button type="button" className="btn btn--sm" onClick={() => setFileError(null)}>Dismiss</button>}
+              >
+                <p className="hint">{fileError}</p>
+              </Callout>
+            )}
+
+            <main>
+              {route.page === 'employees' && (
+                <EmployeesPage project={project} update={update} navigate={navigate} newWeek={newWeek} onDismissNewWeek={() => setNewWeek(false)} />
+              )}
+              {route.page === 'employee' && <EmployeePage project={project} update={update} navigate={navigate} id={route.id} tab={route.tab} />}
+              {route.page === 'coverage' && <CoveragePage project={project} update={update} />}
+              {route.page === 'generate' && (
+                <SolvePanel project={project} update={update} solver={solver} problems={problems} navigate={navigate} onUseSchedule={adoptSchedule} />
+              )}
+              {route.page === 'schedule' && <SchedulePanel project={project} update={update} navigate={navigate} onStartNextWeek={startNextWeek} />}
+              {route.page === 'settings' && <SettingsPage project={project} update={update} navigate={navigate} tab={route.tab} />}
+            </main>
+
+            {/* Back/Next walk the steps; a person's page and Settings are side trips with their own way back. */}
+            {step && route.page !== 'employee' && <StepFooter current={step} onSelect={goTo} />}
           </div>
         </div>
-      </header>
-
-      <div className="page">
-        {exploringExample && route.page === 'employees' && (
-          <Callout
-            tone="good"
-            title="You're exploring an example café"
-            actions={
-              <>
-                <button type="button" className="btn btn--sm btn--primary" onClick={() => setPending({ label: 'a blank project', make: () => projectFromScenario(parseScenario(BLANK)) })}>
-                  Start my own
-                </button>
-                <button type="button" className="btn btn--sm" onClick={() => setExploringExample(false)}>Keep exploring</button>
-              </>
-            }
-          >
-            <p className="hint">
-              Walk through the four steps above to see how it works. Everything saves in this browser as you go.
-            </p>
-          </Callout>
-        )}
-        {fileError && (
-          <Callout
-            tone="critical"
-            role="alert"
-            title="Couldn't open that file"
-            actions={<button type="button" className="btn btn--sm" onClick={() => setFileError(null)}>Dismiss</button>}
-          >
-            <p className="hint">{fileError}</p>
-          </Callout>
-        )}
-
-        <main>
-          {route.page === 'employees' && (
-            <EmployeesPage project={project} update={update} navigate={navigate} newWeek={newWeek} onDismissNewWeek={() => setNewWeek(false)} />
-          )}
-          {route.page === 'employee' && <EmployeePage project={project} update={update} navigate={navigate} id={route.id} tab={route.tab} />}
-          {route.page === 'coverage' && <CoveragePage project={project} update={update} />}
-          {route.page === 'generate' && (
-            <SolvePanel project={project} update={update} solver={solver} problems={problems} navigate={navigate} onUseSchedule={adoptSchedule} />
-          )}
-          {route.page === 'schedule' && <SchedulePanel project={project} update={update} navigate={navigate} onStartNextWeek={startNextWeek} />}
-          {route.page === 'settings' && <SettingsPage project={project} update={update} navigate={navigate} tab={route.tab} />}
-        </main>
-
-        {/* Back/Next walk the steps; a person's page and Settings are side trips with their own way back. */}
-        {step && route.page !== 'employee' && <StepFooter current={step} onSelect={goTo} />}
       </div>
 
       <ConfirmDialog
