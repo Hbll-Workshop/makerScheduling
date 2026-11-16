@@ -68,6 +68,8 @@ export function useUndoable<T>(initial: () => T) {
       setHistory((h) => edit(h, recipe(h.present), now))
     }, []),
     replace: useCallback((next: T) => setHistory((h) => replace(h, next)), []),
+    /** Starts over with no undo history, e.g. after switching to a different document. */
+    reset: useCallback((next: T) => setHistory(initialHistory(next)), []),
     undo: useCallback(() => setHistory(undo), []),
     redo: useCallback(() => setHistory(redo), []),
   }

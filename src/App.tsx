@@ -3,6 +3,7 @@ import { CoveragePage } from './app/components/CoveragePage'
 import { EmployeePage } from './app/components/EmployeePage'
 import { EmployeesPage } from './app/components/EmployeesPage'
 import { SchedulePanel } from './app/components/SchedulePanel'
+import { ProjectSwitcher } from './app/components/ProjectSwitcher'
 import { SettingsPage } from './app/components/SettingsPage'
 import { SolvePanel } from './app/components/SolvePanel'
 import { StepFooter, Stepper } from './app/components/Stepper'
@@ -14,12 +15,22 @@ import { TeamPanel } from './app/components/TeamPanel'
 import { WeekSwitcher } from './app/components/WeekSwitcher'
 import { downloadFile } from './app/download'
 import {
-  loadProject,
+  loadLibrary,
+  loadLibraryProject,
+  removeLibraryProject,
+  saveIndex,
+  saveLibraryProject,
+  touchEntry,
+  uniqueName,
+  type Library,
+  type LibraryEntry,
+} from './app/library'
+import {
+  newId,
   normaliseProject,
   projectFromScenario,
   projectProblems,
   projectToScenario,
-  saveProject,
   saveWeekSchedule,
   setWeekStart,
   solveKey,
@@ -66,23 +77,31 @@ const isTextEntry = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   target.closest('textarea, select, [contenteditable="true"], input:not([type="checkbox"]):not([type="radio"]):not([type="button"])') !== null
 
-type PendingReplace = { label: string; make: () => Project }
+const blankProject = () => projectFromScenario(parseScenario(BLANK))
 
 export function App() {
   const [initial] = useState(() => {
-    const stored = loadProject(storage())
-    return { project: stored ?? projectFromScenario(parseScenario(EXAMPLES['small-cafe'].json)), fresh: stored === null }
+    const stored = loadLibrary(storage())
+    if (stored) return { ...stored, fresh: false }
+    const project = projectFromScenario(parseScenario(EXAMPLES['small-cafe'].json))
+    const id = newId()
+    const library: Library = { activeId: id, entries: [{ id, name: project.name, updatedAt: new Date().toISOString() }] }
+    return { library, project, fresh: true }
   })
   const history = useUndoable(() => initial.project)
   const project = history.value
   const update: ProjectUpdate = history.update
+  const [library, setLibrary] = useState(initial.library)
+  const activeId = library.activeId
+  /** The project as it was opened; saving it unchanged doesn't count as an edit. */
+  const opened = useRef<Project>(initial.project)
 
   const [route, navigate] = useRoute()
   const [theme, toggleTheme] = useTheme(storage())
   const step = stepOf(route)
   const [exploringExample, setExploringExample] = useState(initial.fresh)
   const [newWeek, setNewWeek] = useState(false)
-  const [pending, setPending] = useState<PendingReplace | null>(null)
+  const [deleting, setDeleting] = useState<LibraryEntry | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
   const [saveFailed, setSaveFailed] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -92,10 +111,19 @@ export function App() {
   const freshResults = solver.result !== null && solveKey(solver.result.project) === solveKey(project)
   const states = stepStates(project, freshResults, problems)
 
+  const persist = useCallback((id: string, p: Project) => {
+    setSaveFailed(!saveLibraryProject(storage(), id, p))
+    if (p !== opened.current) setLibrary((lib) => touchEntry(lib, id, p.name))
+  }, [])
+
   useEffect(() => {
-    const timer = window.setTimeout(() => setSaveFailed(!saveProject(storage(), project)), 300)
+    const timer = window.setTimeout(() => persist(activeId, project), 300)
     return () => window.clearTimeout(timer)
-  }, [project])
+  }, [project, activeId, persist])
+
+  useEffect(() => {
+    saveIndex(storage(), library)
+  }, [library])
 
   const { undo, redo } = history
   useEffect(() => {
@@ -118,15 +146,47 @@ export function App() {
     if (route.page !== 'employees') setNewWeek(false)
   }, [route.page])
 
-  const confirmReplace = () => {
-    if (!pending) return
-    const next = pending.make()
-    history.replace(next)
-    setPending(null)
+  /** Makes `next` the open project. `keepCurrent` saves the outgoing one first (skipped when it was just deleted). */
+  const openProject = (id: string, next: Project, keepCurrent: boolean) => {
+    if (keepCurrent) persist(activeId, project)
+    opened.current = next
+    history.reset(next)
+    setLibrary((lib) => ({ ...lib, activeId: id }))
+    solver.reset()
     setFileError(null)
     setExploringExample(false)
     setNewWeek(false)
     navigate({ page: 'employees' })
+  }
+
+  const createProject = (base: Project, keepCurrent = true) => {
+    const id = newId()
+    const next = { ...base, name: uniqueName(base.name, library.entries.filter((e) => e.id !== deleting?.id)) }
+    saveLibraryProject(storage(), id, next)
+    setLibrary((lib) => touchEntry(lib, id, next.name))
+    openProject(id, next, keepCurrent)
+  }
+
+  const switchProject = (id: string) => {
+    const next = loadLibraryProject(storage(), id)
+    if (next) openProject(id, next, true)
+    else setFileError(`That project couldn't be loaded from this browser's storage. It may be damaged; you can delete it from the project list.`)
+  }
+
+  const confirmDelete = () => {
+    if (!deleting) return
+    const gone = deleting
+    setDeleting(null)
+    removeLibraryProject(storage(), gone.id)
+    setLibrary((lib) => ({ ...lib, entries: lib.entries.filter((e) => e.id !== gone.id) }))
+    if (gone.id !== activeId) return
+    // Open the most recent project that still loads, or start a blank one if none is left.
+    const rest = library.entries.filter((e) => e.id !== gone.id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    for (const entry of rest) {
+      const next = loadLibraryProject(storage(), entry.id)
+      if (next) return openProject(entry.id, next, false)
+    }
+    createProject(blankProject(), false)
   }
 
   const saveBackup = () =>
@@ -142,9 +202,7 @@ export function App() {
     try {
       const raw = JSON.parse(await file.text()) as unknown
       const asProject = normaliseProject(raw)
-      const next = asProject ?? projectFromScenario(parseScenario(raw as ScenarioJson), project.search)
-      setPending({ label: `the contents of ${file.name}`, make: () => next })
-      setFileError(null)
+      createProject(asProject ?? projectFromScenario(parseScenario(raw as ScenarioJson), project.search))
     } catch (error) {
       setFileError(`Couldn't read ${file.name}: ${error instanceof Error ? error.message : String(error)}`)
     }
@@ -169,16 +227,25 @@ export function App() {
             <span className="brand-mark"><LogoMark size={16} /></span>
             <span className="brand-name">Schedule Maker</span>
           </div>
-          <input
-            type="text"
-            className="project-name"
-            aria-label="Project name"
-            value={project.name}
-            onChange={(e) => {
-              const name = e.target.value
-              update((p) => ({ ...p, name }))
-            }}
-          />
+          <div className="project-bar">
+            <input
+              type="text"
+              className="project-name"
+              aria-label="Project name"
+              value={project.name}
+              onChange={(e) => {
+                const name = e.target.value
+                update((p) => ({ ...p, name }))
+              }}
+            />
+            <ProjectSwitcher
+              entries={library.entries}
+              activeId={activeId}
+              onSwitch={switchProject}
+              onNew={() => createProject(blankProject())}
+              onDelete={setDeleting}
+            />
+          </div>
           <Stepper current={step} states={states} onSelect={goTo} />
           <TeamPanel project={project} route={route} navigate={navigate} />
           <div className="sidebar-foot">
@@ -216,17 +283,24 @@ export function App() {
               trigger={<>Project <Icon name="chevronDown" size={14} /></>}
               triggerClassName="btn btn--sm"
               entries={[
-                { label: 'New project', icon: 'filePlus', onSelect: () => setPending({ label: 'a blank project', make: () => projectFromScenario(parseScenario(BLANK)) }) },
+                { label: 'New project', icon: 'filePlus', onSelect: () => createProject(blankProject()) },
                 'separator',
                 { label: 'Save backup file', icon: 'download', onSelect: saveBackup },
                 { label: 'Open backup file…', icon: 'upload', onSelect: () => fileInput.current?.click() },
                 { label: 'Export for command line', icon: 'download', onSelect: exportScenario },
                 'separator',
-                { heading: 'Load an example' },
+                {
+                  label: 'Delete this project…',
+                  icon: 'trash',
+                  danger: true,
+                  onSelect: () => setDeleting(library.entries.find((e) => e.id === activeId) ?? { id: activeId, name: project.name, updatedAt: '' }),
+                },
+                'separator',
+                { heading: 'Open an example' },
                 ...Object.values(EXAMPLES).map((example) => ({
                   label: example.label,
                   icon: 'sparkle' as const,
-                  onSelect: () => setPending({ label: `the ${example.label} example`, make: () => projectFromScenario(parseScenario(example.json)) }),
+                  onSelect: () => createProject(projectFromScenario(parseScenario(example.json))),
                 })),
               ]}
             />
@@ -256,7 +330,7 @@ export function App() {
                 title="You're exploring an example café"
                 actions={
                   <>
-                    <button type="button" className="btn btn--sm btn--primary" onClick={() => setPending({ label: 'a blank project', make: () => projectFromScenario(parseScenario(BLANK)) })}>
+                    <button type="button" className="btn btn--sm btn--primary" onClick={() => createProject(blankProject())}>
                       Start my own
                     </button>
                     <button type="button" className="btn btn--sm" onClick={() => setExploringExample(false)}>Keep exploring</button>
@@ -299,14 +373,16 @@ export function App() {
       </div>
 
       <ConfirmDialog
-        open={pending !== null}
-        title="Replace this project?"
-        confirmLabel="Replace"
-        onConfirm={confirmReplace}
-        onCancel={() => setPending(null)}
+        open={deleting !== null}
+        title={`Delete “${deleting?.name || 'Untitled'}”?`}
+        confirmLabel="Delete project"
+        danger
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleting(null)}
       >
         <p className="hint">
-          This loads {pending?.label}. You can undo this, but to keep a copy for good, save a backup file first.
+          This removes the project and all its saved schedules from this browser. It can't be undone, so save a backup file
+          first if you might want it back.
         </p>
       </ConfirmDialog>
     </>

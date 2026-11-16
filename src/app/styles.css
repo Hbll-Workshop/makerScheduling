@@ -180,6 +180,32 @@ input[type='text'].project-name {
 input[type='text'].project-name:hover { border-color: var(--border-strong); }
 input[type='text'].project-name:focus { background: var(--surface); color: var(--text); border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
 
+/* Project name plus the switcher; the list drops down across the whole row. */
+.project-bar { position: relative; display: flex; align-items: center; gap: 4px; }
+.project-bar input[type='text'].project-name { flex: 1; min-width: 0; }
+.project-panel {
+  position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; right: 0; min-width: 16rem;
+  padding: 4px; border-radius: var(--r-lg); border: 1px solid var(--border);
+  background: var(--surface); box-shadow: var(--shadow-md); display: flex; flex-direction: column;
+}
+.project-list { list-style: none; margin: 0; padding: 0; max-height: min(22rem, 60vh); overflow-y: auto; }
+.project-row { display: flex; align-items: center; gap: 2px; border-radius: var(--r); }
+.project-row:hover, .project-row:focus-within { background: var(--surface-2); }
+.project-row-main {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border: none; background: none; text-align: left; cursor: pointer; color: var(--text); border-radius: var(--r);
+}
+.project-row-main:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.project-row-check { width: 14px; flex: none; color: var(--accent); display: inline-flex; }
+.project-row-text { display: flex; flex-direction: column; min-width: 0; }
+.project-row-name { font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-row.is-active .project-row-name { font-weight: 600; }
+.project-row-meta { font-size: 11.5px; color: var(--text-3); }
+.project-row-delete { flex: none; color: var(--text-3); opacity: 0; }
+.project-row:hover .project-row-delete, .project-row:focus-within .project-row-delete { opacity: 1; }
+.project-row-delete:hover:not(:disabled) { color: var(--critical-text); }
+@media (hover: none) { .project-row-delete { opacity: 1; } }
+
 .sidebar-foot { display: flex; align-items: center; gap: 2px; margin-top: auto; padding-top: var(--s-3); border-top: 1px solid var(--border); }
 /* The menu sits at the bottom of the screen, so it opens upwards. */
 .sidebar-foot .menu { top: auto; bottom: calc(100% + 6px); }

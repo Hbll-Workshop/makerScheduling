@@ -5,12 +5,14 @@ interface ConfirmDialogProps {
   title: ReactNode
   children?: ReactNode
   confirmLabel: string
+  /** For actions that destroy something: the confirm button turns red. */
+  danger?: boolean
   onConfirm: () => void
   onCancel: () => void
 }
 
 /** A modal on the native `<dialog>`, which brings focus trapping and Escape with it. */
-export function ConfirmDialog({ open, title, children, confirmLabel, onConfirm, onCancel }: ConfirmDialogProps) {
+export function ConfirmDialog({ open, title, children, confirmLabel, danger = false, onConfirm, onCancel }: ConfirmDialogProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
 
@@ -39,7 +41,7 @@ export function ConfirmDialog({ open, title, children, confirmLabel, onConfirm, 
       </div>
       <div className="modal-footer">
         <button type="button" className="btn" onClick={onCancel}>Cancel</button>
-        <button type="button" className="btn btn--primary" onClick={onConfirm}>{confirmLabel}</button>
+        <button type="button" className={`btn ${danger ? 'btn--danger-solid' : 'btn--primary'}`} onClick={onConfirm}>{confirmLabel}</button>
       </div>
     </dialog>
   )

@@ -100,6 +100,15 @@ export function useSolver() {
 
   const dismiss = useCallback(() => setActivity({ kind: 'idle' }), [])
 
+  /** Drops any run and its results, e.g. when switching to another project. */
+  const reset = useCallback(() => {
+    runIdRef.current++
+    workerRef.current?.terminate()
+    workerRef.current = null
+    setActivity({ kind: 'idle' })
+    setResult(null)
+  }, [])
+
   useEffect(() => () => workerRef.current?.terminate(), [])
 
   return {
@@ -109,5 +118,6 @@ export function useSolver() {
     calibrate: (project: Project) => start('calibrate', project),
     cancel,
     dismiss,
+    reset,
   }
 }
