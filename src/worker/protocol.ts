@@ -16,12 +16,13 @@ export type SolveRequest =
 
 export type SolveResponse =
   | { type: 'progress'; runId: number; progress: SearchProgress }
-  | { type: 'solved'; runId: number; schedules: Schedule[]; report: SearchReport }
+  | { type: 'solved'; runId: number; schedules: Schedule[]; report: SearchReport; diagnosis?: string[] }
   | {
       type: 'calibrated'
       runId: number
       bestScore: number | null
       suggestedThreshold: number | null
       report: SearchReport
+      diagnosis?: string[]
     }
   | { type: 'error'; runId: number; message: string; problems?: string[] }

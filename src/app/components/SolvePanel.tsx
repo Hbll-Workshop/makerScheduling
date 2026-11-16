@@ -221,9 +221,14 @@ function ActivityView({
       )
     }
     case 'calibrated': {
-      const { bestScore, suggestedThreshold, report } = activity
+      const { bestScore, suggestedThreshold, report, diagnosis } = activity
       if (bestScore === null) {
-        return (
+        return diagnosis?.length ? (
+          <Callout tone="warning" title="No schedule is possible" actions={dismiss}>
+            <p className="hint">Here's what can't be met:</p>
+            <Reasons reasons={diagnosis} />
+          </Callout>
+        ) : (
           <Callout tone="warning" title="No complete schedule found within the limit" actions={dismiss}>
             <p className="hint">The roster may be impossible to staff, or it needs more time. Try a longer search time.</p>
           </Callout>
@@ -275,9 +280,29 @@ function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
-function summarise(run: SolvedRun): { tone: 'good' | 'warning'; title: string; detail: string } {
+function Reasons({ reasons }: { reasons: string[] }) {
+  return (
+    <ul className="reasons">
+      {reasons.map((r) => (
+        <li key={r}>{r}</li>
+      ))}
+    </ul>
+  )
+}
+
+function summarise(run: SolvedRun): { tone: 'good' | 'warning'; title: string; detail: string; reasons?: string[] } {
   const { report, schedules } = run
   const count = schedules.length
+
+  // Each reason is a proof, so this holds even if the search itself ran out of time.
+  if (count === 0 && run.diagnosis?.length) {
+    return {
+      tone: 'warning',
+      title: 'No schedule is possible',
+      detail: "Here's what can't be met:",
+      reasons: run.diagnosis,
+    }
+  }
 
   if (!run.project.search.useThreshold) {
     if (count === 0) {
@@ -364,6 +389,7 @@ function ResultSection({ run, project, onUseSchedule }: { run: SolvedRun; projec
     >
       <Callout tone={summary.tone} title={summary.title}>
         <p className="hint">{summary.detail}</p>
+        {summary.reasons && <Reasons reasons={summary.reasons} />}
         {run.project.search.useThreshold && report.provenScope === 'all-above-threshold' && report.schedulesDropped > 0 && (
           <p className="hint">
             {n(report.schedulesDropped)} more qualifying schedules were found but not kept. Raise "Options to keep" to see them.

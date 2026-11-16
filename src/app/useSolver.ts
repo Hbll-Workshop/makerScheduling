@@ -10,12 +10,14 @@ export interface SolvedRun {
   project: Project
   schedules: Schedule[]
   report: SearchReport
+  /** Why no schedule exists, when none was found and a cause could be pinned down. */
+  diagnosis?: string[]
 }
 
 export type Activity =
   | { kind: 'idle' }
   | { kind: 'running'; mode: 'solve' | 'calibrate'; progress: SearchProgress | null; timeLimitSeconds: number }
-  | { kind: 'calibrated'; bestScore: number | null; suggestedThreshold: number | null; report: SearchReport }
+  | { kind: 'calibrated'; bestScore: number | null; suggestedThreshold: number | null; report: SearchReport; diagnosis?: string[] }
   | { kind: 'error'; message: string; problems?: string[] }
   | { kind: 'cancelled' }
 
@@ -45,7 +47,7 @@ export function useSolver() {
         )
         break
       case 'solved':
-        setResult({ project: pendingProjectRef.current!, schedules: message.schedules, report: message.report })
+        setResult({ project: pendingProjectRef.current!, schedules: message.schedules, report: message.report, diagnosis: message.diagnosis })
         setActivity({ kind: 'idle' })
         break
       case 'calibrated':
@@ -54,6 +56,7 @@ export function useSolver() {
           bestScore: message.bestScore,
           suggestedThreshold: message.suggestedThreshold,
           report: message.report,
+          diagnosis: message.diagnosis,
         })
         break
       case 'error':

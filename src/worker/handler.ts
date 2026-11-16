@@ -1,5 +1,6 @@
 import { projectToProblem } from '../app/project'
 import { ConfigError } from '../core/config'
+import { diagnoseInfeasible } from '../core/diagnose'
 import { buildRules } from '../core/rules/catalog'
 import { calibrate, solve, type SearchProgress } from '../core/search/solver'
 import type { SolveRequest, SolveResponse } from './protocol'
@@ -24,7 +25,8 @@ export function handleRequest(request: SolveRequest, post: (response: SolveRespo
 
     if (request.type === 'calibrate') {
       const { bestScore, suggestedThreshold, report } = calibrate(employees, config, budget)
-      post({ type: 'calibrated', runId, bestScore, suggestedThreshold, report })
+      const diagnosis = bestScore === null ? diagnoseInfeasible(employees, config) : undefined
+      post({ type: 'calibrated', runId, bestScore, suggestedThreshold, report, diagnosis })
       return
     }
 
@@ -37,7 +39,9 @@ export function handleRequest(request: SolveRequest, post: (response: SolveRespo
       maxResults: project.search.maxResults,
       tightenToBest: byThreshold ? project.search.tightenToBest : true,
     })
-    post({ type: 'solved', runId, schedules, report })
+    // Nothing found: work out what can't be met, so the message can say exactly what to change.
+    const diagnosis = schedules.length === 0 ? diagnoseInfeasible(employees, config) : undefined
+    post({ type: 'solved', runId, schedules, report, diagnosis })
   } catch (error) {
     post({
       type: 'error',

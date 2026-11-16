@@ -808,3 +808,5 @@ dialog.modal::backdrop { background: rgba(10, 10, 14, 0.4); }
 .off-desk-remove:hover { color: var(--text); }
 .off-desk-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .off-desk-chips .shift-chip { margin-bottom: 0; display: inline-flex; align-items: center; }
+
+.reasons { margin: 4px 0 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
