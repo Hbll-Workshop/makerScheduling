@@ -2,6 +2,7 @@ import { validateProblem } from '../config'
 import { buildProblemContext } from '../patterns'
 import { formatReport, TopKSchedules, type SearchReport, type StopReason } from '../report'
 import { defaultRules } from '../rules/builtins'
+import { makeRng } from '../random'
 import { compileRules, scoreBound, scoreComplete } from '../rules/registry'
 import type { Rule } from '../rules/types'
 import { applyPattern, createState, isComplete, undoPattern, type SearchState } from '../state'
@@ -44,6 +45,11 @@ export interface SolveOptions {
   assertBoundsExact?: boolean
   /** Slot decision order. See {@link buildSlotOrder}. Default `'day-major'`. */
   ordering?: SlotOrdering
+  /**
+   * Non-zero randomises the slot and candidate orders (reproducibly, per seed). Order never
+   * changes which schedules exist, only which are reached first. Default 0: the standard order.
+   */
+  seed?: number
   signal?: AbortSignal
   /**
    * Called periodically while the search runs. The search is synchronous, so this is the only
@@ -62,6 +68,8 @@ export interface SearchProgress {
   maxDepthReached: number
   slotCount: number
   elapsedMs: number
+  /** Which search pass is running, from 1. Above 1 only with restarts. */
+  pass: number
 }
 
 export interface SolveResult {
@@ -86,28 +94,38 @@ export function solve(
   config: ScheduleConfig,
   options: SolveOptions = {},
 ): SolveResult {
+  validateProblem(employees, config)
+  const ctx = buildProblemContext(employees, config)
+  const results = new TopKSchedules(options.maxResults ?? 100)
+  const report = searchOnce(ctx, options, results)
+  return { schedules: results.drain(), report, ctx }
+}
+
+/**
+ * One depth-first pass over `ctx`, offering schedules to `results`. With `tightenToBest`, the
+ * pruning floor starts at whatever `results` already holds, which is how restart passes inherit
+ * the best schedules earlier passes found.
+ */
+function searchOnce(ctx: ProblemContext, options: SolveOptions, results: TopKSchedules): SearchReport {
   const {
     threshold = 0,
     rules = defaultRules(),
-    maxResults = 100,
     maxNodes = 5_000_000,
     maxMillis = 30_000,
     tightenToBest = false,
     assertBoundsExact = false,
     ordering = 'day-major',
+    seed = 0,
     signal,
     onProgress,
     progressIntervalMs = 250,
   } = options
 
-  validateProblem(employees, config)
-
-  const ctx = buildProblemContext(employees, config)
+  const rng = seed ? makeRng(seed) : undefined
   const ruleSet = compileRules(rules, ctx, threshold)
-  const order = buildSlotOrder(ctx, ordering)
-  const valueOrder = buildValueOrder(ctx, ruleSet)
+  const order = buildSlotOrder(ctx, ordering, rng)
+  const valueOrder = buildValueOrder(ctx, ruleSet, rng)
   const state = createState(ctx, order, ruleSet.localPenaltyTable)
-  const results = new TopKSchedules(maxResults)
 
   // Reusable per-depth buffers for the coverage-aware candidate ranking, so ordering
   // candidates at every node costs no allocation.
@@ -140,6 +158,7 @@ export function solve(
       maxDepthReached,
       slotCount: order.length,
       elapsedMs: now - startedAt,
+      pass: 1,
     })
   }
 
@@ -251,8 +270,117 @@ export function solve(
     schedulesDropped: results.droppedCount,
     elapsedMs: Date.now() - startedAt,
     patternCount,
+    passes: 1,
   }
 
+  return report
+}
+
+/** Shortest pass worth starting: below this, setup dominates and a pass reaches nothing new. */
+const MIN_PASS_MS = 250
+/** Share of the time the first, standard-order pass gets. */
+const FIRST_PASS_SHARE = 0.3
+/** The second pass's share; each later pass gets twice the one before. */
+const SECOND_PASS_SHARE = 1 / 16
+
+/**
+ * The best schedules found by several search passes in turn, each starting from different early
+ * decisions.
+ *
+ * A single depth-first search is stuck with its first choices (say, Monday's shifts for the first
+ * few people) until it has exhausted everything beneath them, which on a real roster takes far
+ * longer than any time limit. Better schedules that need a different start are never reached.
+ * Restarting with a shuffled decision order samples many starts instead.
+ *
+ * The first pass uses the standard order, the strongest single heuristic, and gets 30% of the
+ * time. Later passes are mildly randomised and start at a sixteenth of the time, each getting twice
+ * the one before, so a pass that could finish the whole search eventually has the time to; the
+ * last takes whatever remains. On randomly generated makerspace-style rosters this beat a single
+ * search of the same length on most rosters, sometimes by a wide margin; stronger randomisation
+ * (shuffled days, heavier noise) and a shorter first pass both did worse than a single search. All passes share one pool of results, so
+ * each starts already pruning against the best found so far, and a schedule found twice is kept
+ * once.
+ *
+ * Optimising only: always tightens to the best (`tightenToBest`). If any pass runs to the end,
+ * the best `maxResults` are proven, exactly as for a single complete search, since a complete pass
+ * proves it whatever order it searched in, and the search stops there.
+ */
+export function solveWithRestarts(
+  employees: Employee[],
+  config: ScheduleConfig,
+  options: Omit<SolveOptions, 'tightenToBest' | 'seed'> = {},
+): SolveResult {
+  const { maxResults = 100, maxMillis = 30_000, maxNodes = 5_000_000, onProgress, ...rest } = options
+  validateProblem(employees, config)
+  const ctx = buildProblemContext(employees, config)
+  const results = new TopKSchedules(maxResults)
+
+  const startedAt = Date.now()
+  const deadline = startedAt + maxMillis
+  let slice = maxMillis === Infinity ? Infinity : Math.max(MIN_PASS_MS, maxMillis * FIRST_PASS_SHARE)
+  const reports: SearchReport[] = []
+  let nodes = 0
+  let found = 0
+  let best: number | null = null
+  let deepest = 0
+
+  for (let pass = 1; ; pass++) {
+    const remaining = deadline - Date.now()
+    const nodesLeft = maxNodes - nodes
+    if (pass > 1 && (remaining < MIN_PASS_MS || nodesLeft <= 0)) break
+    // When what would be left after this pass is less than the next (doubled) pass needs, take it all.
+    const budget = pass === 1 ? slice : remaining - slice < slice * 2 ? remaining : slice
+
+    const report = searchOnce(
+      ctx,
+      {
+        ...rest,
+        maxMillis: Math.max(0, budget),
+        maxNodes: nodesLeft,
+        tightenToBest: true,
+        seed: pass - 1,
+        onProgress:
+          onProgress &&
+          ((p) =>
+            onProgress({
+              ...p,
+              nodesExplored: nodes + p.nodesExplored,
+              schedulesFound: found + p.schedulesFound,
+              bestScore: best === null ? p.bestScore : p.bestScore === null ? best : Math.max(best, p.bestScore),
+              maxDepthReached: Math.max(deepest, p.maxDepthReached),
+              elapsedMs: Date.now() - startedAt,
+              pass,
+            })),
+      },
+      results,
+    )
+    reports.push(report)
+    nodes += report.nodesExplored
+    found += report.schedulesFound
+    deepest = Math.max(deepest, report.maxDepthReached)
+    const kept = results.drain()[0]
+    if (kept) best = kept.score
+
+    if (report.complete || report.stopReason === 'aborted' || report.stopReason === 'nodeBudget') break
+    slice = pass === 1 ? Math.max(MIN_PASS_MS, maxMillis * SECOND_PASS_SHARE) : slice * 2
+  }
+
+  const last = reports[reports.length - 1]
+  const sum = (key: 'prunedByCoverage' | 'prunedByScore' | 'prunedByHours') => reports.reduce((total, r) => total + r[key], 0)
+  const report: SearchReport = {
+    ...last,
+    provenScope: 'top-k',
+    nodesExplored: nodes,
+    maxDepthReached: deepest,
+    prunedByCoverage: sum('prunedByCoverage'),
+    prunedByScore: sum('prunedByScore'),
+    prunedByHours: sum('prunedByHours'),
+    schedulesFound: found,
+    schedulesKept: results.size,
+    schedulesDropped: results.droppedCount,
+    elapsedMs: Date.now() - startedAt,
+    passes: reports.length,
+  }
   return { schedules: results.drain(), report, ctx }
 }
 
@@ -280,10 +408,9 @@ export function calibrate(
   config: ScheduleConfig,
   options: Omit<SolveOptions, 'threshold' | 'tightenToBest' | 'maxResults'> = {},
 ): Calibration {
-  const { schedules, report } = solve(employees, config, {
+  const { schedules, report } = solveWithRestarts(employees, config, {
     ...options,
     threshold: -Infinity,
-    tightenToBest: true,
     maxResults: 1,
   })
   if (schedules.length === 0) return { bestScore: null, suggestedThreshold: null, report }

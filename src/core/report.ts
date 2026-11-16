@@ -13,6 +13,8 @@ import { DAY_NAMES, DAYS_PER_WEEK, type ProblemContext, type Schedule } from './
 export class TopKSchedules {
   private heap: Schedule[] = []
   private dropped = 0
+  /** Keys of retained schedules, so a schedule reached again by a later search pass isn't kept twice. */
+  private keys = new Set<string>()
 
   constructor(readonly capacity: number) {
     if (capacity < 1) throw new Error('TopKSchedules capacity must be at least 1')
@@ -32,14 +34,19 @@ export class TopKSchedules {
   }
 
   offer(schedule: Schedule): void {
+    const key = keyOf(schedule)
+    if (this.keys.has(key)) return
     if (this.heap.length < this.capacity) {
       this.heap.push(schedule)
+      this.keys.add(key)
       this.siftUp(this.heap.length - 1)
       return
     }
     this.dropped++
     if (schedule.score <= this.heap[0].score) return
+    this.keys.delete(keyOf(this.heap[0]))
     this.heap[0] = schedule
+    this.keys.add(key)
     this.siftDown(0)
   }
 
@@ -73,6 +80,8 @@ export class TopKSchedules {
     }
   }
 }
+
+const keyOf = (schedule: Schedule) => schedule.patternIndices.join(',')
 
 export type StopReason = 'exhausted' | 'nodeBudget' | 'timeBudget' | 'aborted'
 
@@ -109,6 +118,8 @@ export interface SearchReport {
   elapsedMs: number
   /** Total legal day-patterns enumerated across all (employee, day) slots. */
   patternCount: number
+  /** Search passes run: 1 for a single search, more when restarts were used. */
+  passes: number
 }
 
 export function formatReport(report: SearchReport): string {

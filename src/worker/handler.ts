@@ -2,7 +2,7 @@ import { projectToProblem } from '../app/project'
 import { ConfigError } from '../core/config'
 import { diagnoseInfeasible } from '../core/diagnose'
 import { buildRules } from '../core/rules/catalog'
-import { calibrate, solve, type SearchProgress } from '../core/search/solver'
+import { calibrate, solve, solveWithRestarts, type SearchProgress } from '../core/search/solver'
 import type { SolveRequest, SolveResponse } from './protocol'
 
 /**
@@ -30,15 +30,17 @@ export function handleRequest(request: SolveRequest, post: (response: SolveRespo
       return
     }
 
-    // Without a threshold, keep the best `maxResults` found: the same hard-optimising search
-    // `calibrate` runs, widened from one schedule to a handful of options.
-    const byThreshold = project.search.useThreshold
-    const { schedules, report } = solve(employees, config, {
-      ...budget,
-      threshold: byThreshold ? project.threshold : -Infinity,
-      maxResults: project.search.maxResults,
-      tightenToBest: byThreshold ? project.search.tightenToBest : true,
-    })
+    // Without a threshold, keep the best `maxResults` found: the same hard-optimising search with
+    // restarts that `calibrate` runs, widened from one schedule to a handful of options. With a
+    // threshold, one exhaustive pass, since the point is every schedule above it.
+    const { schedules, report } = project.search.useThreshold
+      ? solve(employees, config, {
+          ...budget,
+          threshold: project.threshold,
+          maxResults: project.search.maxResults,
+          tightenToBest: project.search.tightenToBest,
+        })
+      : solveWithRestarts(employees, config, { ...budget, threshold: -Infinity, maxResults: project.search.maxResults })
     // Nothing found: work out what can't be met, so the message can say exactly what to change.
     const diagnosis = schedules.length === 0 ? diagnoseInfeasible(employees, config) : undefined
     post({ type: 'solved', runId, schedules, report, diagnosis })
