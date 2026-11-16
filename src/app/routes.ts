@@ -6,7 +6,7 @@ import type { StepId } from './steps'
  * button, reloads and bookmarks all land where you were. No router dependency: the hash is
  * the whole state.
  */
-export type EmployeeTab = 'details' | 'availability' | 'time-off'
+export type EmployeeTab = 'details' | 'availability'
 export type SettingsTab = 'shifts' | 'priorities' | 'off-desk'
 
 export type Route =
@@ -17,7 +17,7 @@ export type Route =
   | { page: 'schedule' }
   | { page: 'settings'; tab: SettingsTab }
 
-const EMPLOYEE_TABS: EmployeeTab[] = ['details', 'availability', 'time-off']
+const EMPLOYEE_TABS: EmployeeTab[] = ['details', 'availability']
 const SETTINGS_TABS: SettingsTab[] = ['shifts', 'priorities', 'off-desk']
 
 export function parseRoute(hash: string): Route {

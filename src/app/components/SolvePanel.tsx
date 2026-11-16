@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { formatWeekRange } from '../../core/calendar'
 import type { SearchReport } from '../../core/report'
-import { savedScheduleFor, solveKey, type Project, type ProjectUpdate } from '../project'
+import { solveKey, type Project, type ProjectUpdate } from '../project'
 import type { Route } from '../routes'
 import type { SolvedRun, useSolver } from '../useSolver'
 import { NumberField } from './NumberField'
@@ -46,10 +45,8 @@ export function SolvePanel({ project, update, solver, problems, navigate, onUseS
   const running = activity.kind === 'running'
   const blocked = problems.length > 0
   const search = project.search
-  const saved = savedScheduleFor(project, project.weekStart)
+  const saved = project.saved
   const presetTime = SEARCH_TIMES.some((t) => t.value === search.timeLimitSeconds)
-  // Options built for another week would only mislead; the week's own build replaces them.
-  const weekResult = result && result.project.weekStart === project.weekStart ? result : null
 
   const setSearch = (patch: Partial<Project['search']>) => update((p) => ({ ...p, search: { ...p.search, ...patch } }))
 
@@ -57,7 +54,7 @@ export function SolvePanel({ project, update, solver, problems, navigate, onUseS
     <div className="stack">
       <Card
         title="Generate schedules"
-        description={`Finds the best schedules for the week of ${formatWeekRange(project.weekStart)} from who's working and the coverage you need.`}
+        description="Finds the best weekly schedules from who's working and the coverage you need."
       >
         <div className="build-row">
           {running ? (
@@ -66,7 +63,7 @@ export function SolvePanel({ project, update, solver, problems, navigate, onUseS
             </button>
           ) : (
             <button type="button" className="btn btn--lg btn--primary" disabled={blocked} onClick={() => solver.solve(project)}>
-              <Icon name="play" size={14} /> {weekResult ? 'Generate again' : 'Generate schedules'}
+              <Icon name="play" size={14} /> {result ? 'Generate again' : 'Generate schedules'}
             </button>
           )}
           <div className="toolbar-group">
@@ -86,7 +83,7 @@ export function SolvePanel({ project, update, solver, problems, navigate, onUseS
         {saved && (
           <Callout
             tone="good"
-            title="This week already has a saved schedule"
+            title="There's already a saved schedule"
             actions={<button type="button" className="btn btn--sm" onClick={() => navigate({ page: 'schedule' })}>View it</button>}
           >
             <p className="hint">Generating again won't change it unless you choose a different one.</p>
@@ -176,7 +173,7 @@ export function SolvePanel({ project, update, solver, problems, navigate, onUseS
         </details>
       </Card>
 
-      {weekResult && <ResultSection run={weekResult} project={project} onUseSchedule={onUseSchedule} />}
+      {result && <ResultSection run={result} project={project} onUseSchedule={onUseSchedule} />}
     </div>
   )
 }
@@ -310,7 +307,7 @@ function summarise(run: SolvedRun): { tone: 'good' | 'warning'; title: string; d
         ? {
             tone: 'warning',
             title: 'No schedule is possible',
-            detail: "Staff needed, availability, time off and shift rules can't all be met at once. Check Coverage, and who's working.",
+            detail: "Staff needed, availability and shift rules can't all be met at once. Check Coverage, and who's working.",
           }
         : {
             tone: 'warning',
@@ -362,7 +359,7 @@ function ResultSection({ run, project, onUseSchedule }: { run: SolvedRun; projec
   const { report, schedules } = run
   const stale = solveKey(run.project) !== solveKey(project)
   const summary = summarise(run)
-  const replacing = savedScheduleFor(project, run.project.weekStart) !== null
+  const replacing = project.saved !== null
 
   // Bars compare the options with each other: the best fills the bar, the weakest gets a sliver.
   const scores = schedules.map((s) => s.score)
@@ -378,7 +375,6 @@ function ResultSection({ run, project, onUseSchedule }: { run: SolvedRun; projec
   return (
     <Card
       title="Options"
-      description={`Week of ${formatWeekRange(run.project.weekStart)}`}
       actions={
         stale && (
           <span className="pill pill--warning" title="Something has changed since these were generated. Generate again to update them.">
@@ -435,12 +431,12 @@ function ResultSection({ run, project, onUseSchedule }: { run: SolvedRun; projec
 
       <ConfirmDialog
         open={confirming}
-        title="Replace this week's saved schedule?"
+        title="Replace the saved schedule?"
         confirmLabel="Replace"
         onConfirm={use}
         onCancel={() => setConfirming(false)}
       >
-        <p className="hint">The week of {formatWeekRange(run.project.weekStart)} already has a saved schedule. Option {index + 1} will take its place.</p>
+        <p className="hint">There's already a saved schedule. Option {index + 1} will take its place.</p>
       </ConfirmDialog>
     </Card>
   )

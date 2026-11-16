@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { addDays, weekDayIndex } from '../../core/calendar'
 import { fmtHour, fmtHourRange } from '../../core/config'
 import { DAY_NAMES, HOURS_PER_DAY } from '../../core/types'
 import {
@@ -33,7 +32,6 @@ export function OffDeskPanel({ project, update, navigate, saved }: OffDeskPanelP
   const used = shiftHours(saved.offDesk)
   const rows = savedRows(saved)
   const short = rows.filter((r) => r.hours < r.targetWeeklyHours)
-  const week = saved.weekStart
 
   const { from } = visibleHours(project)
   const [employeeId, setEmployeeId] = useState(rows[0]?.employeeId ?? '')
@@ -41,7 +39,7 @@ export function OffDeskPanel({ project, update, navigate, saved }: OffDeskPanelP
   const [startHour, setStartHour] = useState(from)
   const [endHour, setEndHour] = useState(Math.min(from + 3, HOURS_PER_DAY))
   const member = rows.find((r) => r.employeeId === employeeId)
-  const draft = { employeeId, date: addDays(week, day), startHour, endHour }
+  const draft = { employeeId, day, startHour, endHour }
   const conflict = member ? offDeskConflict(saved, draft) : 'Choose someone.'
   const wouldExceed = conflict === null && used + (endHour - startHour) > budget
 
@@ -60,18 +58,18 @@ export function OffDeskPanel({ project, update, navigate, saved }: OffDeskPanelP
   return (
     <Card
       title="Off-desk hours"
-      description={`${used} of ${budget} hours of this week's budget used. Off-desk hours don't count toward coverage.`}
+      description={`${used} of ${budget} hours of the weekly budget used. Off-desk hours don't count toward coverage.`}
       actions={
         <>
           <button
             type="button"
             className="btn btn--sm"
             title="Replace these off-desk hours with fresh suggestions"
-            onClick={() => update((p) => resuggestOffDesk(p, week))}
+            onClick={() => update(resuggestOffDesk)}
           >
             <Icon name="sparkle" size={14} /> Suggest again
           </button>
-          <button type="button" className="btn btn--ghost btn--sm" disabled={used === 0} onClick={() => update((p) => clearOffDesk(p, week))}>
+          <button type="button" className="btn btn--ghost btn--sm" disabled={used === 0} onClick={() => update(clearOffDesk)}>
             Clear
           </button>
         </>
@@ -115,16 +113,16 @@ export function OffDeskPanel({ project, update, navigate, saved }: OffDeskPanelP
                     ) : (
                       <div className="off-desk-chips">
                         {row.offDesk.map((s) => {
-                          const label = `${DAY_NAMES[weekDayIndex(week, s.date) ?? 0]} ${fmtHourRange(s.startHour, s.endHour)}`
+                          const label = `${DAY_NAMES[s.day]} ${fmtHourRange(s.startHour, s.endHour)}`
                           return (
-                            <span key={`${s.date}-${s.startHour}`} className="shift-chip is-off-desk">
+                            <span key={`${s.day}-${s.startHour}`} className="shift-chip is-off-desk">
                               {label}
                               <button
                                 type="button"
                                 className="off-desk-remove"
                                 aria-label={`Remove ${row.employeeName}'s off-desk shift ${label}`}
                                 title="Remove"
-                                onClick={() => update((p) => removeOffDeskShift(p, week, row.employeeId, s.date, s.startHour))}
+                                onClick={() => update((p) => removeOffDeskShift(p, row.employeeId, s.day, s.startHour))}
                               >
                                 <Icon name="x" size={12} />
                               </button>
@@ -176,7 +174,7 @@ export function OffDeskPanel({ project, update, navigate, saved }: OffDeskPanelP
             type="button"
             className="btn btn--sm"
             disabled={conflict !== null || !member}
-            onClick={() => member && update((p) => addOffDeskShift(p, week, { ...draft, employeeName: member.employeeName }))}
+            onClick={() => member && update((p) => addOffDeskShift(p, { ...draft, employeeName: member.employeeName }))}
           >
             <Icon name="plus" size={14} /> Add
           </button>

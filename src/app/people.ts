@@ -1,5 +1,4 @@
-import { DAY_NAMES, HOURS_PER_DAY } from '../core/types'
-import { weekMarks, type Project, type ProjectEmployee } from './project'
+import type { Project } from './project'
 
 /** Up to two letters for an avatar: first and last word, or the first two letters of one word. */
 export function initials(name: string): string {
@@ -14,7 +13,7 @@ export const PERSON_COLORS = 8
 
 /**
  * A colour slot for each of `employeeIds`: their place in the roster, so a person keeps one colour
- * on every page and leaving someone out of a week doesn't repaint the rest. Anyone no longer on
+ * on every page and taking someone off the schedule doesn't repaint the rest. Anyone no longer on
  * the roster (a saved schedule outlives its team) takes the slots after it.
  */
 export function colorSlots(project: Project, employeeIds: readonly string[]): number[] {
@@ -32,17 +31,4 @@ export function colorSlots(project: Project, employeeIds: readonly string[]): nu
 export function personClass(slot: number): string {
   const striped = Math.floor(slot / PERSON_COLORS) % 2 === 1
   return `person-${(slot % PERSON_COLORS) + 1}${striped ? ' person-alt' : ''}`
-}
-
-/** "Off Tue · 1 pinned day": what's special about this person in the week on screen. */
-export function weekNote(project: Project, employee: ProjectEmployee): string {
-  const { timeOff, pinned } = weekMarks(project, employee)
-  const days = (marks: boolean[]) =>
-    DAY_NAMES.filter((_, day) => marks.slice(day * HOURS_PER_DAY, (day + 1) * HOURS_PER_DAY).some(Boolean))
-  const offDays = days(timeOff)
-  const pinDays = days(pinned)
-  const parts = []
-  if (offDays.length) parts.push(`Off ${offDays.length > 2 ? `${offDays.length} days` : offDays.join(', ')}`)
-  if (pinDays.length) parts.push(`${pinDays.length} pinned ${pinDays.length === 1 ? 'day' : 'days'}`)
-  return parts.join(' · ')
 }

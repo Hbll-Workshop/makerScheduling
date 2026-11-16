@@ -1,8 +1,7 @@
-import { useMemo } from 'react'
 import { fmtHour } from '../../core/config'
 import { catalogEntry } from '../../core/rules/catalog'
 import { Availability, DAY_NAMES, WEEK_HOURS, slotIndex, type Schedule, type ShiftBlock } from '../../core/types'
-import { isOpen, projectToProblem, visibleHours, weekDayLabels, workingEmployees, type Project } from '../project'
+import { isOpen, visibleHours, workingEmployees, type Project } from '../project'
 import { colorSlots } from '../people'
 import { ScheduleShifts } from './ScheduleShifts'
 import { WeekGrid } from './WeekGrid'
@@ -14,23 +13,13 @@ function touchesNotPreferred(block: ShiftBlock, availability: number[]): boolean
   return false
 }
 
-function touchesPinned(block: ShiftBlock, pinned: Uint8Array | undefined): boolean {
-  if (!pinned) return false
-  for (let hour = block.startHour; hour < block.endHour; hour++) {
-    if (pinned[slotIndex(block.day, hour)]) return true
-  }
-  return false
-}
-
 /**
  * One schedule, rendered against the project *as it was solved*, so editing the roster
  * afterwards can't make the result display nonsense (e.g. a deleted employee's shifts landing
  * on whoever now sits at that index).
  */
 export function ScheduleView({ schedule, project }: { schedule: Schedule; project: Project }) {
-  // Pins as the solver saw them: this project's week, resolved.
-  const pinned = useMemo(() => projectToProblem(project).employees.map((e) => e.pinned), [project])
-  const dayLabels = weekDayLabels(project)
+  const dayLabels = DAY_NAMES
   const working = workingEmployees(project)
   const slots = colorSlots(project, working.map((e) => e.id))
   const staffed = new Array<number>(WEEK_HOURS).fill(0)
@@ -61,11 +50,10 @@ export function ScheduleView({ schedule, project }: { schedule: Schedule; projec
           blocks: schedule.blocks[e].map((b) => ({
             ...b,
             notPreferred: touchesNotPreferred(b, employee.availability),
-            pinned: touchesPinned(b, pinned[e]),
           })),
         }))}
       />
-      <p className="hint">Dashed shifts include hours the employee marked not preferred. Heavy-outlined shifts were required by a pin.</p>
+      <p className="hint">Dashed shifts include hours the employee marked not preferred.</p>
 
       <div className="stack-sm">
         <h4 className="section-label">Where the points went</h4>

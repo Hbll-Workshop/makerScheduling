@@ -1,27 +1,20 @@
 import { useState } from 'react'
-import { formatWeekRange } from '../../core/calendar'
 import { fmtHour } from '../../core/config'
-import { Availability, DAY_NAMES, HOURS_PER_DAY, WEEK_HOURS } from '../../core/types'
+import { Availability, DAY_NAMES, WEEK_HOURS } from '../../core/types'
 import { initials } from '../people'
 import {
-  clearWeekPins,
-  excludedFor,
   isOpen,
   newId,
   fillEmptyOpenHours,
   paintGrid,
-  setPinnedHour,
   setWorking,
   updateEmployee,
   visibleHours,
-  weekDayLabels,
-  weekMarks,
   type Project,
   type ProjectEmployee,
   type ProjectUpdate,
 } from '../project'
 import type { EmployeeTab, Route } from '../routes'
-import { PinList, TimeOffEditor } from './ExceptionsEditor'
 import { NumberField } from './NumberField'
 import { Callout } from './ui/Callout'
 import { Card } from './ui/Card'
@@ -39,8 +32,7 @@ const levelName = (value: number) => LEVELS.find((l) => l.value === value)?.labe
 
 const TABS: { id: EmployeeTab; label: string }[] = [
   { id: 'details', label: 'Details' },
-  { id: 'availability', label: 'Usual availability' },
-  { id: 'time-off', label: 'Time off & pins' },
+  { id: 'availability', label: 'Availability' },
 ]
 
 interface EmployeePageProps {
@@ -51,7 +43,7 @@ interface EmployeePageProps {
   tab: EmployeeTab
 }
 
-/** One person, one concern at a time: details, their usual week, or this week's exceptions. */
+/** One person, one concern at a time: their details, or when they can work. */
 export function EmployeePage({ project, update, navigate, id, tab }: EmployeePageProps) {
   const employee = project.employees.find((e) => e.id === id)
   const back = () => navigate({ page: 'employees' })
@@ -68,7 +60,7 @@ export function EmployeePage({ project, update, navigate, id, tab }: EmployeePag
     )
   }
 
-  const working = !excludedFor(project, project.weekStart).includes(employee.id)
+  const working = employee.working
 
   return (
     <div className="stack">
@@ -79,7 +71,7 @@ export function EmployeePage({ project, update, navigate, id, tab }: EmployeePag
         <div className="page-title-row">
           <span className="avatar avatar--lg" aria-hidden="true">{initials(employee.name)}</span>
           <h1 className="page-title">{employee.name || 'Unnamed'}</h1>
-          {!working && <span className="pill">Not working this week</span>}
+          {!working && <span className="pill">Not on the schedule</span>}
         </div>
         <nav className="subtabs" aria-label={`${employee.name} sections`}>
           {TABS.map((t) => (
@@ -97,9 +89,8 @@ export function EmployeePage({ project, update, navigate, id, tab }: EmployeePag
       </div>
 
       {/* Keyed so a half-filled form resets when another employee is opened. */}
-      {tab === 'details' && <DetailsTab key={employee.id} project={project} update={update} employee={employee} working={working} navigate={navigate} />}
+      {tab === 'details' && <DetailsTab key={employee.id} update={update} employee={employee} working={working} navigate={navigate} />}
       {tab === 'availability' && <AvailabilityTab project={project} update={update} employee={employee} />}
-      {tab === 'time-off' && <TimeOffTab key={employee.id} project={project} update={update} employee={employee} />}
     </div>
   )
 }
@@ -110,7 +101,7 @@ interface TabProps {
   employee: ProjectEmployee
 }
 
-function DetailsTab({ project, update, employee, working, navigate }: TabProps & { working: boolean; navigate: (route: Route) => void }) {
+function DetailsTab({ update, employee, working, navigate }: Omit<TabProps, "project"> & { working: boolean; navigate: (route: Route) => void }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const duplicate = () => {
@@ -138,8 +129,8 @@ function DetailsTab({ project, update, employee, working, navigate }: TabProps &
         <label className="toggle">
           <input type="checkbox" role="switch" className="switch" checked={working} onChange={(e) => update((p) => setWorking(p, employee.id, e.target.checked))} />
           <span className="toggle-text">
-            <span className="toggle-label">Working the week of {formatWeekRange(project.weekStart)}</span>
-            <span className="toggle-hint">Carries over to the following weeks until you change it.</span>
+            <span className="toggle-label">On the schedule</span>
+            <span className="toggle-hint">Off keeps them on the team without scheduling them.</span>
           </span>
         </label>
       </Card>
@@ -164,7 +155,7 @@ function DetailsTab({ project, update, employee, working, navigate }: TabProps &
               </>
             }
           >
-            <p className="hint">Their availability, time off and pins go with them. Saved schedules keep their name. You can undo this.</p>
+            <p className="hint">Their availability goes with them. Saved schedules keep their name. You can undo this.</p>
           </Callout>
         )}
       </Card>
@@ -182,9 +173,9 @@ function AvailabilityTab({ project, update, employee }: TabProps) {
 
   return (
     <Card
-      title="Usual availability"
-      description="When they can work in a normal week. Pick a brush, then click or drag across the grid."
-      info="This repeats every week. For one-off changes, use Time off & pins. Faded hours are outside your opening hours and never get scheduled."
+      title="Availability"
+      description="When they can work each week. Pick a brush, then click or drag across the grid."
+      info="Faded hours are outside your opening hours and never get scheduled."
     >
       <div className="toolbar">
         <Segmented
@@ -224,7 +215,7 @@ function AvailabilityTab({ project, update, employee }: TabProps) {
       </div>
 
       <WeekGrid
-        label={`${employee.name} usual availability`}
+        label={`${employee.name} availability`}
         hours={visibleHours(project)}
         onPaint={(slot) => paint([slot], brush)}
         describe={(slot, day, hour) => {
@@ -245,85 +236,5 @@ function AvailabilityTab({ project, update, employee }: TabProps) {
         ))}
       </div>
     </Card>
-  )
-}
-
-function TimeOffTab({ project, update, employee }: TabProps) {
-  const [pinning, setPinning] = useState<'pin' | 'unpin'>('pin')
-  const marks = weekMarks(project, employee)
-
-  return (
-    <>
-      <Card
-        title="Time off"
-        description="Can run across several days. They won't be scheduled during it."
-        info="Tied to dates: only entries in the week being scheduled affect it. Entries for other weeks are kept, so vacations can go in ahead of time."
-      >
-        <TimeOffEditor project={project} employee={employee} update={update} />
-      </Card>
-
-      <Card
-        title={`Must-work shifts for ${formatWeekRange(project.weekStart)}`}
-        description="Paint hours they must work this week. They'll work at least these hours."
-        info="Pins belong to the dates shown. Use the week switcher at the top to pin another week."
-      >
-        <div className="toolbar">
-          <Segmented
-            label="Pin brush"
-            value={pinning}
-            onChange={setPinning}
-            options={[
-              { value: 'pin', label: (<><span className="swatch avail-2 cell-pinned" /> Pin</>) },
-              { value: 'unpin', label: 'Unpin' },
-            ]}
-          />
-          <div className="toolbar-actions">
-            <button type="button" className="btn btn--ghost btn--sm" onClick={() => update((p) => clearWeekPins(p, employee.id))}>
-              Clear pins this week
-            </button>
-          </div>
-        </div>
-
-        <WeekGrid
-          label={`${employee.name} pins this week`}
-          hours={visibleHours(project)}
-          dayLabels={weekDayLabels(project)}
-          onPaint={(slot) =>
-            update((p) => {
-              // A closed hour can never be worked, so a stroke passing over it doesn't pin it.
-              const closed = !isOpen(p, Math.floor(slot / HOURS_PER_DAY), slot % HOURS_PER_DAY)
-              return pinning === 'pin' && closed ? p : setPinnedHour(p, employee.id, slot, pinning === 'pin')
-            })
-          }
-          describe={(slot, day, hour) => {
-            const value = employee.availability[slot]
-            const open = isOpen(project, day, hour)
-            const off = marks.timeOff[slot]
-            const pinned = marks.pinned[slot]
-            const notes = [off && 'time off', pinned && 'pinned', !open && 'closed'].filter(Boolean)
-            return {
-              className: `avail-${value}${off ? ' cell-timeoff' : ''}${pinned ? ' cell-pinned' : ''}${open ? '' : ' avail-outside'}`,
-              title: `${DAY_NAMES[day]} ${fmtHour(hour)}: ${levelName(value)}${notes.length ? ` (${notes.join(', ')})` : ''}`,
-            }
-          }}
-        />
-
-        <div className="legend">
-          {LEVELS.map((level) => (
-            <span key={level.value} className="legend-item">
-              <span className={`swatch avail-${level.value}`} /> {level.label}
-            </span>
-          ))}
-          <span className="legend-item">
-            <span className="swatch avail-2 cell-timeoff" /> Time off
-          </span>
-          <span className="legend-item">
-            <span className="swatch avail-2 cell-pinned" /> Pinned
-          </span>
-        </div>
-
-        <PinList project={project} employee={employee} update={update} />
-      </Card>
-    </>
   )
 }

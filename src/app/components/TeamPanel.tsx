@@ -1,5 +1,5 @@
 import { colorSlots, initials, personClass } from '../people'
-import { excludedFor, savedRows, savedScheduleFor, type Project } from '../project'
+import { savedRows, type Project } from '../project'
 import type { Route } from '../routes'
 
 interface TeamPanelProps {
@@ -9,29 +9,28 @@ interface TeamPanelProps {
 }
 
 /**
- * The whole roster in the sidebar, in each person's schedule colour. Once the week has a saved
+ * The whole roster in the sidebar, in each person's schedule colour. Once there's a saved
  * schedule, each person shows their hours against their target; before that, just the target.
  */
 export function TeamPanel({ project, route, navigate }: TeamPanelProps) {
-  const out = new Set(excludedFor(project, project.weekStart))
-  const saved = savedScheduleFor(project, project.weekStart)
+  const saved = project.saved
   const hours = new Map(saved ? savedRows(saved).map((r) => [r.employeeId, r.hours]) : [])
   const slots = colorSlots(project, project.employees.map((e) => e.id))
 
   return (
     <section className="team" aria-labelledby="team-heading">
       <h2 id="team-heading" className="section-label team-heading">
-        Team this week
+        Team
       </h2>
       {project.employees.length === 0 ? (
         <p className="empty team-empty">No employees yet.</p>
       ) : (
         <ul className="team-list">
           {project.employees.map((e, i) => {
-            const isOut = out.has(e.id)
+            const isOut = !e.working
             const worked = hours.get(e.id)
             const active = route.page === 'employee' && route.id === e.id
-            const meta = isOut ? 'Off this week' : worked !== undefined ? `${worked}h of ${e.targetWeeklyHours}h` : `${e.targetWeeklyHours}h target`
+            const meta = isOut ? 'Not on the schedule' : worked !== undefined ? `${worked}h of ${e.targetWeeklyHours}h` : `${e.targetWeeklyHours}h target`
             return (
               <li key={e.id}>
                 <button

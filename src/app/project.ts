@@ -1,25 +1,9 @@
-import {
-  addDays,
-  isIsoDate,
-  mondayOf,
-  resolveWeek,
-  spanIsValid,
-  spanSlots,
-  spanTiming,
-  todayIso,
-  weekDayIndex,
-  type DatedHours,
-  type EmployeeExceptions,
-  type IsoDate,
-  type TimeSpan,
-} from '../core/calendar'
 import { ConfigError, DEFAULT_CONFIG, validateProblem } from '../core/config'
 import type { Scenario } from '../core/io'
 import { suggestOffDesk } from '../core/offDesk'
 import { normaliseRuleSettings, type RuleSetting } from '../core/rules/catalog'
 import {
   Availability,
-  DAY_NAMES,
   DAYS_PER_WEEK,
   HOURS_PER_DAY,
   WEEK_HOURS,
@@ -32,7 +16,7 @@ import {
 } from '../core/types'
 
 /**
- * The editor's working document.
+ * The editor's working document: one repeating week, and the schedule chosen for it.
  *
  * Deliberately plain data — number arrays instead of typed arrays, settings instead of rule
  * objects — so it round-trips through `JSON.stringify` for `localStorage` and through
@@ -42,8 +26,6 @@ import {
 export interface Project {
   version: 1
   name: string
-  /** Monday of the week being scheduled. Dated time off and pins apply only within it. */
-  weekStart: IsoDate
   operatingHours: (OperatingWindow | null)[]
   /** 168 entries, `slotIndex(day, hour)`. */
   minCoverage: number[]
@@ -52,35 +34,28 @@ export interface Project {
   rules: RuleSetting[]
   threshold: number
   search: SearchSettings
-  /** The schedule chosen for each week, at most one per week, oldest first. */
-  saved: SavedSchedule[]
-  /**
-   * Who is left out of a week's schedule, keyed by that week's Monday. A week with no entry
-   * inherits the closest earlier week's, so each week starts as the one before it ended; with no
-   * earlier entry at all, everyone works. Storing who is *out* means new hires start in.
-   */
-  excluded: Record<IsoDate, string[]>
+  /** The schedule chosen for the week, or `null` before one is chosen. */
+  saved: SavedSchedule | null
   offDesk: OffDeskSettings
 }
 
 /** Off-desk work: paid hours away from the desk, from a budget shared by the whole team. */
 export interface OffDeskSettings {
-  /** Off-desk hours the whole team may use each week. The same every week. */
+  /** Off-desk hours the whole team may use each week. */
   weeklyBudget: number
 }
 
 export const DEFAULT_OFF_DESK: OffDeskSettings = { weeklyBudget: 0 }
 
 /**
- * A schedule someone chose to use for a week. Stored as dated shifts with names copied in, so
- * history still reads correctly after the team changes.
+ * The schedule someone chose. Shifts carry names copied in, so it still reads correctly after the
+ * team changes.
  */
 export interface SavedSchedule {
-  weekStart: IsoDate
   /** ISO timestamp. */
   savedAt: string
   score: number
-  /** Everyone on the roster when it was saved, in roster order — including anyone with no shifts. */
+  /** Everyone on the schedule when it was saved, in roster order — including anyone with no shifts. */
   team: SavedMember[]
   shifts: SavedShift[]
   /**
@@ -99,7 +74,8 @@ export interface SavedMember {
 export interface SavedShift {
   employeeId: string
   employeeName: string
-  date: IsoDate
+  /** 0 = Monday … 6 = Sunday. */
+  day: number
   startHour: number
   endHour: number
 }
@@ -116,20 +92,10 @@ export interface ProjectEmployee {
   name: string
   maxWeeklyHours: number
   targetWeeklyHours: number
-  /** 168 entries of {@link Availability}. The recurring week; time off overrides it. */
+  /** 168 entries of {@link Availability}. */
   availability: number[]
-  timeOff: ProjectTimeOff[]
-  /** Painted onto the grid a week at a time; stored as contiguous runs per date. */
-  pins: ProjectPin[]
-}
-
-/** Ids let the editor list and remove entries. */
-export interface ProjectTimeOff extends TimeSpan {
-  id: string
-}
-
-export interface ProjectPin extends DatedHours {
-  id: string
+  /** On the schedule. Off keeps someone on the roster without scheduling them. */
+  working: boolean
 }
 
 export type ShiftRules = Pick<
@@ -183,12 +149,10 @@ function shiftRulesOf(config: ScheduleConfig): ShiftRules {
   }
 }
 
-/** A scenario without a week of its own is scheduled for the current week. */
-export function projectFromScenario(scenario: Scenario, search = DEFAULT_SEARCH, today = todayIso()): Project {
+export function projectFromScenario(scenario: Scenario, search = DEFAULT_SEARCH): Project {
   return {
     version: 1,
     name: scenario.name,
-    weekStart: scenario.weekStart ?? mondayOf(today),
     operatingHours: scenario.config.operatingHours.map((w) => (w ? { ...w } : null)),
     minCoverage: Array.from(scenario.config.minCoverage),
     shiftRules: shiftRulesOf(scenario.config),
@@ -198,70 +162,33 @@ export function projectFromScenario(scenario: Scenario, search = DEFAULT_SEARCH,
       maxWeeklyHours: e.maxWeeklyHours,
       targetWeeklyHours: e.targetWeeklyHours,
       availability: Array.from(e.availability),
-      timeOff: (scenario.exceptions[e.id]?.timeOff ?? []).map((span) => ({ id: newId(), ...span })),
-      pins: (scenario.exceptions[e.id]?.pins ?? []).map((pin) => ({ id: newId(), ...pin })),
+      working: true,
     })),
     rules: scenario.rules.map((r) => ({ ...r })),
     threshold: scenario.threshold,
     search: { ...search },
-    saved: [],
-    excluded: {},
+    saved: null,
     offDesk: { ...DEFAULT_OFF_DESK },
   }
 }
 
-/**
- * What the solver sees: the people working this week, with this week's time off and pins applied.
- * Its employee order is {@link workingEmployees}' order; results are indexed by it.
- */
+/** What the solver sees: the people working. Results are indexed in {@link workingEmployees}' order. */
 export function projectToProblem(project: Project): { employees: Employee[]; config: ScheduleConfig } {
   const { employees, config } = projectRoster(project)
-  const out = new Set(excludedFor(project, project.weekStart))
-  const working = employees.filter((e) => !out.has(e.id))
-  return { employees: resolveWeek(working, project.weekStart, projectExceptions(project)), config }
+  const working = new Set(workingEmployees(project).map((e) => e.id))
+  return { employees: employees.filter((e) => working.has(e.id)), config }
 }
 
-// ---------------------------------------------------------------------------
-// Who works which week.
-// ---------------------------------------------------------------------------
-
-/** Ids left out of `weekStart`: its own entry, else the closest earlier week's, else nobody. */
-export function excludedFor(project: Project, weekStart: IsoDate): string[] {
-  let best: IsoDate | null = null
-  for (const week of Object.keys(project.excluded)) {
-    if (week <= weekStart && (best === null || week > best)) best = week
-  }
-  return best === null ? [] : project.excluded[best]
-}
-
-/** The employees scheduled in the project's week, in roster order. */
+/** The employees on the schedule, in roster order. */
 export function workingEmployees(project: Project): ProjectEmployee[] {
-  const out = new Set(excludedFor(project, project.weekStart))
-  return project.employees.filter((e) => !out.has(e.id))
+  return project.employees.filter((e) => e.working)
 }
 
-/** Puts someone in or out of the project's week. Pins that week's list, so later edits elsewhere can't shift it. */
 export function setWorking(project: Project, employeeId: string, working: boolean): Project {
-  const ids = new Set(project.employees.map((e) => e.id))
-  const out = new Set(excludedFor(project, project.weekStart).filter((id) => ids.has(id)))
-  if (working) out.delete(employeeId)
-  else out.add(employeeId)
-  return { ...project, excluded: { ...project.excluded, [project.weekStart]: [...out] } }
+  return updateEmployee(project, employeeId, { working })
 }
 
-function projectExceptions(project: Project): Record<string, EmployeeExceptions> {
-  return Object.fromEntries(
-    project.employees.map((e) => [
-      e.id,
-      {
-        timeOff: e.timeOff.map(({ id: _id, ...span }) => span),
-        pins: e.pins.map(({ id: _id, ...pin }) => pin),
-      },
-    ]),
-  )
-}
-
-/** The recurring roster, before any dated entries are applied. */
+/** Everyone on the roster, working or not. */
 function projectRoster(project: Project): { employees: Employee[]; config: ScheduleConfig } {
   return {
     employees: project.employees.map((e) => ({
@@ -285,8 +212,6 @@ export function projectToScenario(project: Project): Scenario {
     name: project.name,
     threshold: project.threshold,
     rules: project.rules,
-    weekStart: project.weekStart,
-    exceptions: projectExceptions(project),
     ...projectRoster(project),
   }
 }
@@ -297,7 +222,7 @@ export function projectToScenario(project: Project): Scenario {
  */
 export function solveKey(p: Project): string {
   return JSON.stringify([
-    p.weekStart, excludedFor(p, p.weekStart), p.operatingHours, p.minCoverage, p.shiftRules, p.employees, p.rules, p.threshold, p.search.useThreshold,
+    p.operatingHours, p.minCoverage, p.shiftRules, p.employees, p.rules, p.threshold, p.search.useThreshold,
   ])
 }
 
@@ -419,8 +344,7 @@ export function newEmployee(project: Project): ProjectEmployee {
     maxWeeklyHours: 40,
     targetWeeklyHours: 20,
     availability,
-    timeOff: [],
-    pins: [],
+    working: true,
   }
 }
 
@@ -431,159 +355,44 @@ export function updateEmployee(project: Project, id: string, patch: Partial<Proj
   }
 }
 
-/** Moves the project to the week containing `date`. */
-export function setWeekStart(project: Project, date: IsoDate): Project {
-  return isIsoDate(date) ? { ...project, weekStart: mondayOf(date) } : project
-}
-
-/** Applies `change` to one employee, leaving every other employee object untouched. */
-function withEmployee(project: Project, id: string, change: (e: ProjectEmployee) => ProjectEmployee): Project {
-  return { ...project, employees: project.employees.map((e) => (e.id === id ? change(e) : e)) }
-}
-
-/** Adds time off, ignoring a span that isn't valid. */
-export function addTimeOff(project: Project, employeeId: string, span: TimeSpan): Project {
-  if (!spanIsValid(span)) return project
-  return withEmployee(project, employeeId, (e) => ({
-    ...e,
-    timeOff: [...e.timeOff, { id: newId(), ...span }].sort(
-      (a, b) => a.startDate.localeCompare(b.startDate) || a.startHour - b.startHour,
-    ),
-  }))
-}
-
-export function removeTimeOff(project: Project, employeeId: string, id: string): Project {
-  return withEmployee(project, employeeId, (e) => ({ ...e, timeOff: e.timeOff.filter((x) => x.id !== id) }))
-}
-
-export function removePin(project: Project, employeeId: string, id: string): Project {
-  return withEmployee(project, employeeId, (e) => ({ ...e, pins: e.pins.filter((x) => x.id !== id) }))
-}
-
-/**
- * Pins or unpins one hour of the week on screen. The date's pins are rebuilt as contiguous runs,
- * so painting 9, 10 and 11 stores a single 9–12 pin and unpinning 10 splits it in two.
- */
-export function setPinnedHour(project: Project, employeeId: string, slot: number, pinned: boolean): Project {
-  const date = addDays(project.weekStart, Math.floor(slot / HOURS_PER_DAY))
-  const hour = slot % HOURS_PER_DAY
-  const employee = project.employees.find((e) => e.id === employeeId)
-  if (!employee) return project
-
-  const hours = new Array<boolean>(HOURS_PER_DAY).fill(false)
-  for (const pin of employee.pins) {
-    if (pin.date === date) for (let h = pin.startHour; h < pin.endHour; h++) hours[h] = true
-  }
-  if (hours[hour] === pinned) return project
-  hours[hour] = pinned
-
-  const runs: ProjectPin[] = []
-  let start = -1
-  for (let h = 0; h <= HOURS_PER_DAY; h++) {
-    const set = h < HOURS_PER_DAY && hours[h]
-    if (set && start < 0) start = h
-    if (!set && start >= 0) {
-      runs.push({ id: newId(), date, startHour: start, endHour: h })
-      start = -1
-    }
-  }
-  return withEmployee(project, employeeId, (e) => ({
-    ...e,
-    pins: [...e.pins.filter((p) => p.date !== date), ...runs].sort(
-      (a, b) => a.date.localeCompare(b.date) || a.startHour - b.startHour,
-    ),
-  }))
-}
-
-/** Removes the employee's pins dated in the week on screen; other weeks' pins stay. */
-export function clearWeekPins(project: Project, employeeId: string): Project {
-  return withEmployee(project, employeeId, (e) => ({
-    ...e,
-    pins: e.pins.filter((p) => weekDayIndex(project.weekStart, p.date) === null),
-  }))
-}
-
-/** Column headers for the project's week: `'Mon 21'`. */
-export function weekDayLabels(project: Project): string[] {
-  return dayLabelsFor(project.weekStart)
-}
-
-export function dayLabelsFor(weekStart: IsoDate): string[] {
-  return DAY_NAMES.map((name, day) => `${name} ${Number(addDays(weekStart, day).slice(8))}`)
-}
-
-/** 168-entry grids marking which hours this week's time off and pins cover for `employee`. */
-export function weekMarks(project: Project, employee: ProjectEmployee): { timeOff: boolean[]; pinned: boolean[] } {
-  const timeOff = new Array<boolean>(WEEK_HOURS).fill(false)
-  for (const span of employee.timeOff) {
-    const { from, to } = spanSlots(project.weekStart, span)
-    for (let slot = from; slot < to; slot++) timeOff[slot] = true
-  }
-  const pinned = new Array<boolean>(WEEK_HOURS).fill(false)
-  for (const pin of employee.pins) {
-    const day = weekDayIndex(project.weekStart, pin.date)
-    if (day === null) continue
-    for (let hour = pin.startHour; hour < pin.endHour; hour++) pinned[slotIndex(day, hour)] = true
-  }
-  return { timeOff, pinned }
-}
-
-/** Where time off or a pin falls relative to the project's week. */
-export function entryTiming(project: Project, entry: TimeSpan | DatedHours): 'past' | 'thisWeek' | 'later' {
-  const span: TimeSpan =
-    'date' in entry
-      ? { startDate: entry.date, startHour: entry.startHour, endDate: entry.date, endHour: entry.endHour }
-      : entry
-  return spanTiming(project.weekStart, span)
-}
-
 // ---------------------------------------------------------------------------
-// Saved schedules.
+// The saved schedule.
 // ---------------------------------------------------------------------------
 
-export function savedScheduleFor(project: Project, weekStart: IsoDate): SavedSchedule | null {
-  return project.saved.find((s) => s.weekStart === weekStart) ?? null
-}
-
 /**
- * Records `schedule` as the schedule for `solved.weekStart`, replacing any earlier choice for that
- * week. `solved` must be the project the schedule was built from: blocks are indexed by its
- * employee order, which later edits may have changed.
+ * Records `schedule` as the project's schedule, replacing any earlier choice, with off-desk hours
+ * suggested from the current budget. `solved` must be the project the schedule was built from:
+ * blocks are indexed by its employee order, which later edits may have changed.
  */
-export function saveWeekSchedule(project: Project, solved: Project, schedule: Schedule, now = new Date()): Project {
+export function saveSchedule(project: Project, solved: Project, schedule: Schedule, now = new Date()): Project {
   const working = workingEmployees(solved)
-  const shifts = toSavedShifts(solved.weekStart, working, schedule.blocks)
+  const shifts = toSavedShifts(working, schedule.blocks)
   const team = working.map((e) => ({ employeeId: e.id, employeeName: e.name, targetWeeklyHours: e.targetWeeklyHours }))
-  // Off-desk hours are suggested straight away, from today's budget: changing the budget doesn't
-  // make generated schedules stale, so `solved` may predate it.
+  // Changing the budget doesn't make generated schedules stale, so `solved` may predate it.
   const { employees, config } = projectToProblem(solved)
   const offDesk = toSavedShifts(
-    solved.weekStart,
     working,
     suggestOffDesk({ employees, desk: schedule.blocks, budget: project.offDesk.weeklyBudget, limits: config }),
   )
-  const entry: SavedSchedule = { weekStart: solved.weekStart, savedAt: now.toISOString(), score: schedule.score, team, shifts, offDesk }
-  const saved = [...project.saved.filter((s) => s.weekStart !== solved.weekStart), entry]
-  saved.sort((a, b) => a.weekStart.localeCompare(b.weekStart))
-  return { ...project, saved }
+  return { ...project, saved: { savedAt: now.toISOString(), score: schedule.score, team, shifts, offDesk } }
 }
 
-/** Blocks per person (in `people` order) as dated shifts, sorted like a saved schedule's. */
-function toSavedShifts(weekStart: IsoDate, people: readonly { id: string; name: string }[], blocks: readonly (readonly ShiftBlock[])[]): SavedShift[] {
+/** Blocks per person (in `people` order) as saved shifts, sorted by day then time. */
+function toSavedShifts(people: readonly { id: string; name: string }[], blocks: readonly (readonly ShiftBlock[])[]): SavedShift[] {
   const shifts: SavedShift[] = []
   people.forEach((person, i) => {
     for (const block of blocks[i] ?? []) {
-      shifts.push({ employeeId: person.id, employeeName: person.name, date: addDays(weekStart, block.day), startHour: block.startHour, endHour: block.endHour })
+      shifts.push({ employeeId: person.id, employeeName: person.name, day: block.day, startHour: block.startHour, endHour: block.endHour })
     }
   })
   return sortShifts(shifts)
 }
 
 const sortShifts = (shifts: SavedShift[]) =>
-  shifts.sort((a, b) => a.date.localeCompare(b.date) || a.startHour - b.startHour || a.employeeName.localeCompare(b.employeeName))
+  shifts.sort((a, b) => a.day - b.day || a.startHour - b.startHour || a.employeeName.localeCompare(b.employeeName))
 
-export function removeSavedSchedule(project: Project, weekStart: IsoDate): Project {
-  return { ...project, saved: project.saved.filter((s) => s.weekStart !== weekStart) }
+export function removeSavedSchedule(project: Project): Project {
+  return { ...project, saved: null }
 }
 
 export interface SavedRow extends SavedMember {
@@ -608,66 +417,59 @@ export function savedRows(saved: SavedSchedule): SavedRow[] {
   })
 }
 
+export const blockOf = (s: SavedShift): ShiftBlock => ({ day: s.day, startHour: s.startHour, endHour: s.endHour })
+
 // ---------------------------------------------------------------------------
-// Off-desk hours on a saved schedule.
+// Off-desk hours on the saved schedule.
 // ---------------------------------------------------------------------------
 
-function withSaved(project: Project, weekStart: IsoDate, change: (s: SavedSchedule) => SavedSchedule): Project {
-  return { ...project, saved: project.saved.map((s) => (s.weekStart === weekStart ? change(s) : s)) }
+function withSaved(project: Project, change: (s: SavedSchedule) => SavedSchedule): Project {
+  return project.saved ? { ...project, saved: change(project.saved) } : project
 }
 
 /**
- * Fresh off-desk suggestions for a saved week, replacing whatever it had. Uses the roster as it is
- * now (availability, time off, targets), for team members who are still on it.
+ * Fresh off-desk suggestions, replacing whatever the schedule had. Uses the roster as it is now
+ * (availability, targets), for team members who are still on it.
  */
-export function resuggestOffDesk(project: Project, weekStart: IsoDate): Project {
-  const saved = savedScheduleFor(project, weekStart)
+export function resuggestOffDesk(project: Project): Project {
+  const saved = project.saved
   if (!saved) return project
-  const atWeek = { ...project, weekStart }
-  const { employees: resolved, config } = projectToProblem({ ...atWeek, excluded: {} })
-  const byId = new Map(resolved.map((e) => [e.id, e]))
+  const { employees: roster, config } = projectRoster(project)
+  const byId = new Map(roster.map((e) => [e.id, e]))
   const members = saved.team.filter((m) => byId.has(m.employeeId))
   const employees = members.map((m) => byId.get(m.employeeId)!)
-  const desk = members.map((m) => blocksOf(weekStart, saved.shifts.filter((s) => s.employeeId === m.employeeId)))
+  const desk = members.map((m) => saved.shifts.filter((s) => s.employeeId === m.employeeId).map(blockOf))
   const blocks = suggestOffDesk({ employees, desk, budget: project.offDesk.weeklyBudget, limits: config })
   const people = members.map((m) => ({ id: m.employeeId, name: m.employeeName }))
-  return withSaved(project, weekStart, (s) => ({ ...s, offDesk: toSavedShifts(weekStart, people, blocks) }))
+  return withSaved(project, (s) => ({ ...s, offDesk: toSavedShifts(people, blocks) }))
 }
 
-function blocksOf(weekStart: IsoDate, shifts: readonly SavedShift[]): ShiftBlock[] {
-  return shifts.flatMap((s) => {
-    const day = weekDayIndex(weekStart, s.date)
-    return day === null ? [] : [{ day, startHour: s.startHour, endHour: s.endHour }]
-  })
+export function clearOffDesk(project: Project): Project {
+  return withSaved(project, (s) => ({ ...s, offDesk: [] }))
 }
 
-export function clearOffDesk(project: Project, weekStart: IsoDate): Project {
-  return withSaved(project, weekStart, (s) => ({ ...s, offDesk: [] }))
-}
-
-/** Why an off-desk shift can't be added to a saved week, or `null` if it can. */
+/** Why an off-desk shift can't be added to the saved schedule, or `null` if it can. */
 export function offDeskConflict(saved: SavedSchedule, shift: Omit<SavedShift, 'employeeName'>): string | null {
-  if (weekDayIndex(saved.weekStart, shift.date) === null) return 'That date is outside this week.'
+  if (!(Number.isInteger(shift.day) && shift.day >= 0 && shift.day < DAYS_PER_WEEK)) return 'Choose a day.'
   if (!(shift.startHour >= 0 && shift.startHour < shift.endHour && shift.endHour <= HOURS_PER_DAY)) return 'The end must be after the start.'
   const overlaps = (s: SavedShift) =>
-    s.employeeId === shift.employeeId && s.date === shift.date && s.startHour < shift.endHour && shift.startHour < s.endHour
+    s.employeeId === shift.employeeId && s.day === shift.day && s.startHour < shift.endHour && shift.startHour < s.endHour
   if (saved.shifts.some(overlaps)) return 'That overlaps one of their desk shifts.'
   if (saved.offDesk.some(overlaps)) return 'That overlaps another of their off-desk shifts.'
   return null
 }
 
-/** Adds an off-desk shift to a saved week; ignored if {@link offDeskConflict} finds a problem. */
-export function addOffDeskShift(project: Project, weekStart: IsoDate, shift: SavedShift): Project {
-  const saved = savedScheduleFor(project, weekStart)
-  if (!saved || offDeskConflict(saved, shift) !== null) return project
-  return withSaved(project, weekStart, (s) => ({ ...s, offDesk: sortShifts([...s.offDesk, { ...shift }]) }))
+/** Adds an off-desk shift; ignored if {@link offDeskConflict} finds a problem. */
+export function addOffDeskShift(project: Project, shift: SavedShift): Project {
+  if (!project.saved || offDeskConflict(project.saved, shift) !== null) return project
+  return withSaved(project, (s) => ({ ...s, offDesk: sortShifts([...s.offDesk, { ...shift }]) }))
 }
 
-/** Removes the off-desk shift starting at `startHour` on `date` for that person. */
-export function removeOffDeskShift(project: Project, weekStart: IsoDate, employeeId: string, date: IsoDate, startHour: number): Project {
-  return withSaved(project, weekStart, (s) => ({
+/** Removes the off-desk shift starting at `startHour` on `day` for that person. */
+export function removeOffDeskShift(project: Project, employeeId: string, day: number, startHour: number): Project {
+  return withSaved(project, (s) => ({
     ...s,
-    offDesk: s.offDesk.filter((x) => !(x.employeeId === employeeId && x.date === date && x.startHour === startHour)),
+    offDesk: s.offDesk.filter((x) => !(x.employeeId === employeeId && x.day === day && x.startHour === startHour)),
   }))
 }
 
@@ -677,101 +479,77 @@ export function removeOffDeskShift(project: Project, weekStart: IsoDate, employe
 
 export const STORAGE_KEY = 'scheduleMaker.project.v1'
 
-const isDatedHours = (value: unknown): value is DatedHours => {
-  const v = value as Partial<DatedHours> | null
-  return (
-    typeof v === 'object' && v !== null && isIsoDate(v.date) &&
-    Number.isInteger(v.startHour) && Number.isInteger(v.endHour) &&
-    v.startHour! >= 0 && v.startHour! < v.endHour! && v.endHour! <= HOURS_PER_DAY
-  )
-}
+const isHours = (startHour: unknown, endHour: unknown) =>
+  Number.isInteger(startHour) && Number.isInteger(endHour) &&
+  (startHour as number) >= 0 && (startHour as number) < (endHour as number) && (endHour as number) <= HOURS_PER_DAY
 
-const entryId = (raw: unknown) => {
-  const id = (raw as { id?: unknown }).id
-  return typeof id === 'string' ? id : newId()
-}
-
-/** Pins from storage, or `null` if any is malformed. A missing list is an older save: empty. */
-function normalisePins(raw: unknown): ProjectPin[] | null {
-  if (raw === undefined) return []
-  if (!Array.isArray(raw) || !raw.every(isDatedHours)) return null
-  return raw.map((pin) => ({ id: entryId(pin), date: pin.date, startHour: pin.startHour, endHour: pin.endHour }))
-}
-
-/**
- * Time off from storage, or `null` if any entry is malformed. Early saves stored single-day
- * `{ date, startHour, endHour }` entries; those become one-day spans.
- */
-function normaliseTimeOff(raw: unknown): ProjectTimeOff[] | null {
-  if (raw === undefined) return []
-  if (!Array.isArray(raw)) return null
-  const out: ProjectTimeOff[] = []
-  for (const entry of raw) {
-    if (isDatedHours(entry)) {
-      out.push({ id: entryId(entry), startDate: entry.date, startHour: entry.startHour, endDate: entry.date, endHour: entry.endHour })
-      continue
-    }
-    const span = entry as Partial<TimeSpan> | null
-    if (typeof span !== 'object' || span === null) return null
-    const candidate = { startDate: span.startDate, startHour: span.startHour, endDate: span.endDate, endHour: span.endHour } as TimeSpan
-    if (!spanIsValid(candidate)) return null
-    out.push({ id: entryId(entry), ...candidate })
-  }
-  return out
-}
-
-const isSavedShift = (value: unknown): value is SavedShift => {
-  const v = value as Partial<SavedShift> | null
-  return (
-    typeof v === 'object' && v !== null && typeof v.employeeId === 'string' && typeof v.employeeName === 'string' &&
-    isDatedHours({ date: v.date, startHour: v.startHour, endHour: v.endHour })
-  )
-}
-
-const isSavedMember = (value: unknown): value is SavedMember => {
+const isMember = (value: unknown): value is SavedMember => {
   const v = value as Partial<SavedMember> | null
   return typeof v === 'object' && v !== null && typeof v.employeeId === 'string' && typeof v.employeeName === 'string' && Number.isFinite(v.targetWeeklyHours)
 }
 
-const copyShift = ({ employeeId, employeeName, date, startHour, endHour }: SavedShift): SavedShift => ({ employeeId, employeeName, date, startHour, endHour })
-
-/** Saved schedules from storage, or `null` if any is malformed. A missing list is an older save: empty. */
-function normaliseSaved(raw: unknown): SavedSchedule[] | null {
-  if (raw === undefined) return []
-  if (!Array.isArray(raw)) return null
-  const out: SavedSchedule[] = []
-  for (const entry of raw) {
-    const s = entry as Partial<SavedSchedule> | null
-    if (typeof s !== 'object' || s === null) return null
-    if (!isIsoDate(s.weekStart) || mondayOf(s.weekStart) !== s.weekStart) return null
-    if (typeof s.savedAt !== 'string' || !Number.isFinite(s.score)) return null
-    if (!Array.isArray(s.shifts) || !s.shifts.every(isSavedShift)) return null
-    if (!Array.isArray(s.team) || !s.team.every(isSavedMember)) return null
-    const offDesk = s.offDesk ?? []
-    if (!Array.isArray(offDesk) || !offDesk.every(isSavedShift)) return null
-    out.push({
-      weekStart: s.weekStart,
-      savedAt: s.savedAt,
-      score: s.score!,
-      team: s.team.map(({ employeeId, employeeName, targetWeeklyHours }) => ({ employeeId, employeeName, targetWeeklyHours })),
-      shifts: s.shifts.map(copyShift),
-      offDesk: offDesk.map(copyShift),
-    })
+/** Earlier versions kept a week's Monday and shift dates; days since that Monday give the weekday. */
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/
+function daysBetween(from: string, to: string): number | null {
+  const ms = (date: string) => {
+    const m = ISO_DATE.exec(date)
+    return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : NaN
   }
-  return out.sort((a, b) => a.weekStart.localeCompare(b.weekStart))
+  const days = (ms(to) - ms(from)) / 86_400_000
+  return Number.isInteger(days) ? days : null
 }
 
-/** Who sat out which week, or `null` if malformed. A missing record is an older save: nobody. */
-function normaliseExcluded(raw: unknown): Record<IsoDate, string[]> | null {
-  if (raw === undefined) return {}
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
-  const out: Record<IsoDate, string[]> = {}
-  for (const [week, ids] of Object.entries(raw)) {
-    if (!isIsoDate(week) || mondayOf(week) !== week) return null
-    if (!Array.isArray(ids) || !ids.every((id) => typeof id === 'string')) return null
-    out[week] = [...ids]
+/**
+ * A shift from storage, or `null` if malformed. Earlier versions stored a `date`; with the week's
+ * Monday in `weekStart`, it becomes that week's weekday.
+ */
+function normaliseShift(raw: unknown, weekStart: string | null): SavedShift | null {
+  const v = raw as Partial<SavedShift> & { date?: unknown } | null
+  if (typeof v !== 'object' || v === null || typeof v.employeeId !== 'string' || typeof v.employeeName !== 'string') return null
+  if (!isHours(v.startHour, v.endHour)) return null
+  let day = v.day
+  if (day === undefined && typeof v.date === 'string' && weekStart) day = daysBetween(weekStart, v.date) ?? undefined
+  if (!(Number.isInteger(day) && day! >= 0 && day! < DAYS_PER_WEEK)) return null
+  return { employeeId: v.employeeId, employeeName: v.employeeName, day: day!, startHour: v.startHour!, endHour: v.endHour! }
+}
+
+/**
+ * The saved schedule from storage: `null` for none, `undefined` if malformed. Earlier versions kept
+ * a list with one schedule per dated week; the most recent becomes the schedule.
+ */
+function normaliseSaved(raw: unknown): SavedSchedule | null | undefined {
+  if (raw === undefined || raw === null) return null
+  let entry = raw as Partial<SavedSchedule> & { weekStart?: unknown }
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return null
+    entry = [...raw].sort((a, b) => String(b?.weekStart).localeCompare(String(a?.weekStart)))[0]
   }
-  return out
+  if (typeof entry !== 'object' || entry === null) return undefined
+  if (typeof entry.savedAt !== 'string' || !Number.isFinite(entry.score)) return undefined
+  if (!Array.isArray(entry.team) || !entry.team.every(isMember)) return undefined
+  const weekStart = typeof entry.weekStart === 'string' ? entry.weekStart : null
+  const shifts = (entry.shifts ?? []).map((s: unknown) => normaliseShift(s, weekStart))
+  const offDesk = (entry.offDesk ?? []).map((s: unknown) => normaliseShift(s, weekStart))
+  if (!Array.isArray(entry.shifts) || shifts.includes(null) || offDesk.includes(null)) return undefined
+  return {
+    savedAt: entry.savedAt,
+    score: entry.score!,
+    team: entry.team.map(({ employeeId, employeeName, targetWeeklyHours }) => ({ employeeId, employeeName, targetWeeklyHours })),
+    shifts: shifts as SavedShift[],
+    offDesk: offDesk as SavedShift[],
+  }
+}
+
+/**
+ * Who was left out, from an earlier version's per-week record: the entry for its last-viewed week,
+ * else the closest earlier one.
+ */
+function legacyExcluded(raw: unknown, weekStart: unknown): Set<string> {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return new Set()
+  const weeks = Object.keys(raw).sort()
+  const at = typeof weekStart === 'string' ? weeks.filter((w) => w <= weekStart).pop() : weeks.pop()
+  const ids = at === undefined ? [] : (raw as Record<string, unknown>)[at]
+  return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [])
 }
 
 const isGrid = (value: unknown): value is number[] =>
@@ -780,32 +558,34 @@ const isGrid = (value: unknown): value is number[] =>
 /**
  * Accepts anything that came out of storage or a file and returns a well-formed project, or
  * `null`. Structural problems reject the whole document; merely-missing optional sections
- * (rules, search settings) fall back to defaults so older saves keep loading.
+ * (rules, search settings) fall back to defaults so older saves keep loading. Dated time off and
+ * pins from earlier versions are dropped.
  */
-export function normaliseProject(raw: unknown, today = todayIso()): Project | null {
+export function normaliseProject(raw: unknown): Project | null {
   if (typeof raw !== 'object' || raw === null) return null
-  const p = raw as Partial<Project>
+  const p = raw as Partial<Project> & { excluded?: unknown; weekStart?: unknown }
   if (p.version !== 1 || typeof p.name !== 'string') return null
   if (!Array.isArray(p.operatingHours) || p.operatingHours.length !== DAYS_PER_WEEK) return null
   if (!isGrid(p.minCoverage) || !Array.isArray(p.employees) || typeof p.shiftRules !== 'object') return null
-  if (p.weekStart !== undefined && (!isIsoDate(p.weekStart) || mondayOf(p.weekStart) !== p.weekStart)) return null
 
+  const out = legacyExcluded(p.excluded, p.weekStart)
   const employees: ProjectEmployee[] = []
   for (const e of p.employees) {
     if (typeof e?.id !== 'string' || typeof e.name !== 'string' || !isGrid(e.availability)) return null
-    const timeOff = normaliseTimeOff(e.timeOff)
-    const pins = normalisePins(e.pins)
-    if (!timeOff || !pins) return null
-    employees.push({ ...e, timeOff, pins })
+    employees.push({
+      id: e.id,
+      name: e.name,
+      maxWeeklyHours: e.maxWeeklyHours,
+      targetWeeklyHours: e.targetWeeklyHours,
+      availability: e.availability,
+      working: typeof e.working === 'boolean' ? e.working : !out.has(e.id),
+    })
   }
   const saved = normaliseSaved(p.saved)
-  if (!saved) return null
-  const excluded = normaliseExcluded(p.excluded)
-  if (!excluded) return null
+  if (saved === undefined) return null
   return {
     version: 1,
     name: p.name,
-    weekStart: p.weekStart ?? mondayOf(today),
     // Opening hours follow coverage now; older saves could hold hours that needed nobody.
     operatingHours: windowsFromCoverage(p.minCoverage),
     minCoverage: p.minCoverage,
@@ -815,7 +595,6 @@ export function normaliseProject(raw: unknown, today = todayIso()): Project | nu
     threshold: Number.isFinite(p.threshold) ? p.threshold! : 0,
     search: { ...DEFAULT_SEARCH, ...p.search },
     saved,
-    excluded,
     offDesk: normaliseOffDesk(p.offDesk),
   }
 }

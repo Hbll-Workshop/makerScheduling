@@ -7,14 +7,13 @@ import {
   projectFromScenario,
   removeOffDeskShift,
   resuggestOffDesk,
-  saveWeekSchedule,
+  saveSchedule,
   savedRows,
-  savedScheduleFor,
   type Project,
 } from '../src/app/project'
 import { placeOffDesk, suggestOffDesk, type OffDeskLimits } from '../src/core/offDesk'
 import { Availability, WEEK_HOURS, slotIndex, type Employee, type Schedule, type ShiftBlock } from '../src/core/types'
-import { FIXTURE_WEEK, loadFixture } from './helpers'
+import { loadFixture } from './helpers'
 
 const LIMITS: OffDeskLimits = { maxShiftLength: 4, maxDailyHours: 8 }
 
@@ -103,7 +102,7 @@ describe('placeOffDesk', () => {
 // ---------------------------------------------------------------------------
 
 const cafe = (budget = 0): Project => ({
-  ...projectFromScenario({ ...loadFixture('small-cafe.json'), name: 'Small Cafe', weekStart: FIXTURE_WEEK }),
+  ...projectFromScenario({ ...loadFixture('small-cafe.json'), name: 'Small Cafe' }),
   offDesk: { weeklyBudget: budget },
 })
 
@@ -116,10 +115,10 @@ const schedule = (): Schedule => ({
   penalties: {},
 })
 
-describe('off-desk hours on saved schedules', () => {
+describe('off-desk hours on the saved schedule', () => {
   it('suggests hours when a schedule is saved, within budget and targets, clear of desk shifts', () => {
     const p = cafe(6)
-    const saved = savedScheduleFor(saveWeekSchedule(p, p, schedule()), FIXTURE_WEEK)!
+    const saved = saveSchedule(p, p, schedule()).saved!
     const total = saved.offDesk.reduce((sum, s) => sum + s.endHour - s.startHour, 0)
     expect(total).toBeGreaterThan(0)
     expect(total).toBeLessThanOrEqual(6)
@@ -129,41 +128,41 @@ describe('off-desk hours on saved schedules', () => {
 
   it('suggests nothing without a budget', () => {
     const p = cafe(0)
-    expect(savedScheduleFor(saveWeekSchedule(p, p, schedule()), FIXTURE_WEEK)!.offDesk).toEqual([])
+    expect(saveSchedule(p, p, schedule()).saved!.offDesk).toEqual([])
   })
 
   it('adds, refuses overlaps, removes, clears and re-suggests', () => {
     let p = cafe(0)
-    p = saveWeekSchedule(p, p, schedule())
-    const add = { employeeId: 'ana', employeeName: 'Ana', date: '2026-09-22', startHour: 9, endHour: 12 }
-    p = addOffDeskShift(p, FIXTURE_WEEK, add)
-    expect(savedScheduleFor(p, FIXTURE_WEEK)!.offDesk).toEqual([add])
+    p = saveSchedule(p, p, schedule())
+    const add = { employeeId: 'ana', employeeName: 'Ana', day: 1, startHour: 9, endHour: 12 }
+    p = addOffDeskShift(p, add)
+    expect(p.saved!.offDesk).toEqual([add])
 
-    const clash = { ...add, date: '2026-09-21', startHour: 12, endHour: 14 }
-    expect(offDeskConflict(savedScheduleFor(p, FIXTURE_WEEK)!, clash)).toMatch(/desk shift/)
-    expect(addOffDeskShift(p, FIXTURE_WEEK, clash)).toBe(p)
-    expect(offDeskConflict(savedScheduleFor(p, FIXTURE_WEEK)!, { ...add, startHour: 11, endHour: 13 })).toMatch(/off-desk/)
+    const clash = { ...add, day: 0, startHour: 12, endHour: 14 }
+    expect(offDeskConflict(p.saved!, clash)).toMatch(/desk shift/)
+    expect(addOffDeskShift(p, clash)).toBe(p)
+    expect(offDeskConflict(p.saved!, { ...add, startHour: 11, endHour: 13 })).toMatch(/off-desk/)
 
-    expect(removeOffDeskShift(p, FIXTURE_WEEK, 'ana', '2026-09-22', 9).saved[0].offDesk).toEqual([])
-    expect(clearOffDesk(p, FIXTURE_WEEK).saved[0].offDesk).toEqual([])
+    expect(removeOffDeskShift(p, 'ana', 1, 9).saved!.offDesk).toEqual([])
+    expect(clearOffDesk(p).saved!.offDesk).toEqual([])
 
-    p = resuggestOffDesk({ ...p, offDesk: { weeklyBudget: 3 } }, FIXTURE_WEEK)
-    const total = savedScheduleFor(p, FIXTURE_WEEK)!.offDesk.reduce((sum, s) => sum + s.endHour - s.startHour, 0)
+    p = resuggestOffDesk({ ...p, offDesk: { weeklyBudget: 3 } })
+    const total = p.saved!.offDesk.reduce((sum, s) => sum + s.endHour - s.startHour, 0)
     expect(total).toBe(3)
   })
 
   it('survives a storage round trip, and older saves load with no off-desk hours', () => {
     const p = cafe(6)
-    const withSaved = saveWeekSchedule(p, p, schedule())
+    const withSaved = saveSchedule(p, p, schedule())
     const back = normaliseProject(JSON.parse(JSON.stringify(withSaved)))!
     expect(back.offDesk).toEqual({ weeklyBudget: 6 })
     expect(back.saved).toEqual(withSaved.saved)
 
     const older = JSON.parse(JSON.stringify(withSaved))
     delete older.offDesk
-    delete older.saved[0].offDesk
+    delete older.saved.offDesk
     const loaded = normaliseProject(older)!
     expect(loaded.offDesk).toEqual({ weeklyBudget: 0 })
-    expect(loaded.saved[0].offDesk).toEqual([])
+    expect(loaded.saved!.offDesk).toEqual([])
   })
 })

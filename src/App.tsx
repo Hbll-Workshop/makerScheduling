@@ -12,7 +12,6 @@ import { ConfirmDialog } from './app/components/ui/ConfirmDialog'
 import { Icon, LogoMark } from './app/components/ui/Icon'
 import { Menu } from './app/components/ui/Menu'
 import { TeamPanel } from './app/components/TeamPanel'
-import { WeekSwitcher } from './app/components/WeekSwitcher'
 import { downloadFile } from './app/download'
 import {
   loadLibrary,
@@ -31,8 +30,7 @@ import {
   projectFromScenario,
   projectProblems,
   projectToScenario,
-  saveWeekSchedule,
-  setWeekStart,
+  saveSchedule,
   solveKey,
   type Project,
   type ProjectUpdate,
@@ -42,7 +40,6 @@ import { STEPS, stepStates, type StepId } from './app/steps'
 import { useTheme } from './app/theme'
 import { useSolver, type SolvedRun } from './app/useSolver'
 import { useUndoable } from './app/useUndoable'
-import { addDays, todayIso } from './core/calendar'
 import { parseScenario, serializeScenario, type ScenarioJson } from './core/io'
 import mediumShop from './fixtures/medium-shop.json'
 import smallCafe from './fixtures/small-cafe.json'
@@ -100,7 +97,6 @@ export function App() {
   const [theme, toggleTheme] = useTheme(storage())
   const step = stepOf(route)
   const [exploringExample, setExploringExample] = useState(initial.fresh)
-  const [newWeek, setNewWeek] = useState(false)
   const [deleting, setDeleting] = useState<LibraryEntry | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
   const [saveFailed, setSaveFailed] = useState(false)
@@ -141,11 +137,6 @@ export function App() {
 
   const goTo = useCallback((next: StepId) => navigate(stepRoute(next)), [navigate])
 
-  // The new-week prompt belongs to the first page of the new week only.
-  useEffect(() => {
-    if (route.page !== 'employees') setNewWeek(false)
-  }, [route.page])
-
   /** Makes `next` the open project. `keepCurrent` saves the outgoing one first (skipped when it was just deleted). */
   const openProject = (id: string, next: Project, keepCurrent: boolean) => {
     if (keepCurrent) persist(activeId, project)
@@ -155,7 +146,6 @@ export function App() {
     solver.reset()
     setFileError(null)
     setExploringExample(false)
-    setNewWeek(false)
     navigate({ page: 'employees' })
   }
 
@@ -190,7 +180,7 @@ export function App() {
   }
 
   const saveBackup = () =>
-    downloadFile(`${slug(project.name)}-backup-${todayIso()}.json`, JSON.stringify(project, null, 2), 'application/json')
+    downloadFile(`${slug(project.name)}-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(project, null, 2), 'application/json')
 
   const exportScenario = () =>
     downloadFile(`${slug(project.name)}.json`, JSON.stringify(serializeScenario(projectToScenario(project)), null, 2), 'application/json')
@@ -209,14 +199,8 @@ export function App() {
   }
 
   const adoptSchedule = (run: SolvedRun, index: number) => {
-    update((p) => saveWeekSchedule(p, run.project, run.schedules[index]))
+    update((p) => saveSchedule(p, run.project, run.schedules[index]))
     goTo('schedule')
-  }
-
-  const startNextWeek = () => {
-    update((p) => setWeekStart(p, addDays(p.weekStart, 7)))
-    navigate({ page: 'employees' })
-    setNewWeek(true)
   }
 
   return (
@@ -312,7 +296,6 @@ export function App() {
           <header className="workspace-head">
             {step && <h1 className="workspace-title">{STEPS.find((s) => s.id === step)?.label}</h1>}
             <span className="spacer" />
-            <WeekSwitcher project={project} update={update} />
             <div className="btn-group history-buttons">
               <button type="button" className="btn btn--icon btn--sm" aria-label="Undo" title="Undo (Ctrl+Z)" disabled={!history.canUndo} onClick={undo}>
                 <Icon name="undo" />
@@ -338,7 +321,7 @@ export function App() {
                 }
               >
                 <p className="hint">
-                  Walk through the four steps above to see how it works. Everything saves in this browser as you go.
+                  Walk through the four steps in the sidebar to see how it works. Everything saves in this browser as you go.
                 </p>
               </Callout>
             )}
@@ -355,14 +338,14 @@ export function App() {
 
             <main>
               {route.page === 'employees' && (
-                <EmployeesPage project={project} update={update} navigate={navigate} newWeek={newWeek} onDismissNewWeek={() => setNewWeek(false)} />
+                <EmployeesPage project={project} update={update} navigate={navigate} />
               )}
               {route.page === 'employee' && <EmployeePage project={project} update={update} navigate={navigate} id={route.id} tab={route.tab} />}
               {route.page === 'coverage' && <CoveragePage project={project} update={update} />}
               {route.page === 'generate' && (
                 <SolvePanel project={project} update={update} solver={solver} problems={problems} navigate={navigate} onUseSchedule={adoptSchedule} />
               )}
-              {route.page === 'schedule' && <SchedulePanel project={project} update={update} navigate={navigate} onStartNextWeek={startNextWeek} />}
+              {route.page === 'schedule' && <SchedulePanel project={project} update={update} navigate={navigate} />}
               {route.page === 'settings' && <SettingsPage project={project} update={update} navigate={navigate} tab={route.tab} />}
             </main>
 
@@ -381,7 +364,7 @@ export function App() {
         onCancel={() => setDeleting(null)}
       >
         <p className="hint">
-          This removes the project and all its saved schedules from this browser. It can't be undone, so save a backup file
+          This removes the project and its saved schedule from this browser. It can't be undone, so save a backup file
           first if you might want it back.
         </p>
       </ConfirmDialog>

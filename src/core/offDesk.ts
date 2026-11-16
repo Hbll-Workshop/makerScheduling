@@ -17,11 +17,11 @@ export interface OffDeskLimits {
 }
 
 export interface OffDeskInput {
-  /** Week-resolved employees: availability already reflects time off. */
+  /** Employees, with their weekly availability. */
   employees: readonly Employee[]
   /** Desk shifts per employee, in `employees` order. */
   desk: readonly (readonly ShiftBlock[])[]
-  /** Off-desk hours available to hand out this week. */
+  /** Off-desk hours available to hand out each week. */
   budget: number
   limits: OffDeskLimits
 }

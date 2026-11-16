@@ -1,8 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { formatWeekRange } from './core/calendar'
 import { ConfigError } from './core/config'
-import { parseScenario, scenarioEmployees, ScenarioError, type ScenarioJson } from './core/io'
+import { parseScenario, ScenarioError, type ScenarioJson } from './core/io'
 import { PatternExplosionError } from './core/patterns'
 import { formatReport, formatSchedule } from './core/report'
 import { buildRules } from './core/rules/catalog'
@@ -64,8 +63,7 @@ function main(): void {
   const path = resolve(process.cwd(), file)
   const json = JSON.parse(readFileSync(path, 'utf8')) as ScenarioJson
   const scenario = parseScenario(json)
-  const employees = scenarioEmployees(scenario)
-  const week = scenario.weekStart ? `, week of ${formatWeekRange(scenario.weekStart)}` : ''
+  const { employees } = scenario
 
   const threshold = flags.has('threshold')
     ? numeric(flags, 'threshold', scenario.threshold)
@@ -78,7 +76,7 @@ function main(): void {
   }
 
   if (flags.has('calibrate')) {
-    process.stdout.write(`${scenario.name}${week} — calibrating…\n\n`)
+    process.stdout.write(`${scenario.name} — calibrating…\n\n`)
     const { bestScore, suggestedThreshold, report } = calibrate(employees, scenario.config, budget)
     process.stdout.write(`${formatReport(report)}\n\n`)
     if (bestScore === null) {
@@ -99,7 +97,7 @@ function main(): void {
   }
 
   process.stdout.write(
-    `${scenario.name}${week} — ${employees.length} employees, threshold ${threshold}\n\n`,
+    `${scenario.name} — ${employees.length} employees, threshold ${threshold}\n\n`,
   )
 
   const { schedules, report, ctx } = solve(employees, scenario.config, {

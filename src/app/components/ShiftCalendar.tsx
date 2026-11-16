@@ -3,7 +3,6 @@ import { fmtHour, fmtHourRange } from '../../core/config'
 import { DAYS_PER_WEEK } from '../../core/types'
 import { personClass } from '../people'
 import type { ShiftTableBlock, ShiftTableRow } from './ShiftTable'
-import { Icon } from './ui/Icon'
 
 /** The hours the calendar spans: `hours` if given, widened to take in every shift. */
 function axisRange(rows: ShiftTableRow[], hours?: { from: number; to: number }): { from: number; to: number } {
@@ -122,13 +121,12 @@ export function ShiftCalendar({ dayLabels, rows, hours }: ShiftCalendarProps) {
                   const notes = [
                     `${row.name}, ${dayLabels[day]}, ${range} (${block.endHour - block.startHour}h)`,
                     block.offDesk && 'Off desk',
-                    block.pinned && 'Covers a pinned shift',
                     block.notPreferred && 'Includes hours this employee marked not preferred',
                   ].filter(Boolean)
                   return (
                     <div
                       key={`${row.key}-${block.startHour}`}
-                      className={`calendar-shift ${personClass(row.slot ?? 0)}${block.notPreferred ? ' has-not-preferred' : ''}${block.pinned ? ' is-pinned' : ''}${block.offDesk ? ' is-off-desk' : ''}`}
+                      className={`calendar-shift ${personClass(row.slot ?? 0)}${block.notPreferred ? ' has-not-preferred' : ''}${block.offDesk ? ' is-off-desk' : ''}`}
                       style={{
                         top: `calc(var(--hour-h) * ${block.startHour - from} + 2px)`,
                         height: `calc(var(--hour-h) * ${block.endHour - block.startHour} - 4px)`,
@@ -139,7 +137,6 @@ export function ShiftCalendar({ dayLabels, rows, hours }: ShiftCalendarProps) {
                     >
                       {/* The card is a size container: narrow cards drop the time, then turn the name on its side. */}
                       <div className="calendar-shift-body">
-                        {block.pinned && <Icon name="pin" size={11} className="calendar-shift-pin" />}
                         <span className="calendar-shift-name">{row.name}</span>
                         <span className="calendar-shift-time">{block.offDesk ? `Off desk · ${range}` : range}</span>
                       </div>

@@ -258,23 +258,6 @@ input[type='text'].project-name:focus { background: var(--surface); color: var(-
 .workspace-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); min-height: 44px; padding-inline: 4px; }
 .workspace-title { font-size: 26px; line-height: 1.15; }
 
-.week-switcher { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
-.week-switcher-control {
-  position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px;
-  border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-sm);
-}
-.week-switcher-range {
-  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: none; border-radius: 8px;
-  background: none; cursor: pointer; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text);
-}
-.week-switcher-range:hover { background: var(--surface-2); }
-.week-switcher-range .icon { color: var(--accent); }
-/* The native picker opens from here; it stays in layout (showPicker needs that) but out of sight. */
-input[type='date'].week-switcher-input {
-  position: absolute; left: 50%; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none;
-}
-.pill--button { cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 500; }
-.pill--button:hover { filter: brightness(0.97); }
 
 .page { display: flex; flex-direction: column; gap: var(--s-4); padding-bottom: var(--s-4); }
 
@@ -554,16 +537,6 @@ dialog.modal::backdrop { background: rgba(10, 10, 14, 0.4); }
 }
 .avail-0 { background: var(--avail-unavailable); }
 .avail-outside { opacity: 0.4; }
-/* Time off: a dense cross-hatch over whatever the recurring availability is, so it reads as
-   "not this week" rather than as a change to the usual week underneath. */
-.cell-timeoff {
-  background:
-    repeating-linear-gradient(45deg, var(--text-2) 0 1.5px, transparent 1.5px 5px),
-    repeating-linear-gradient(-45deg, var(--text-2) 0 1.5px, transparent 1.5px 5px),
-    var(--avail-unavailable);
-}
-.cell-pinned { box-shadow: inset 0 0 0 2px var(--ink); }
-.week-grid.is-paintable .week-cell.cell-pinned:hover { box-shadow: inset 0 0 0 3px var(--ink); }
 
 .seq-0 { background: var(--surface-2); color: var(--text-3); }
 .seq-1 { background: var(--seq-1); color: #0b0b0b; }
@@ -691,7 +664,6 @@ dialog.modal::backdrop { background: rgba(10, 10, 14, 0.4); }
   border: 1px solid color-mix(in srgb, var(--avail-preferred) 40%, var(--surface));
 }
 .shift-chip.has-not-preferred { border-style: dashed; border-color: var(--avail-not-preferred); }
-.shift-chip.is-pinned { border-width: 2px; border-color: var(--ink); }
 .chip-note { color: var(--text-2); font-weight: 400; }
 .hours-target { font-size: 12px; color: var(--text-3); }
 
@@ -740,7 +712,6 @@ dialog.modal::backdrop { background: rgba(10, 10, 14, 0.4); }
 }
 .timeline-name { font-weight: 600; }
 .timeline-bar.has-not-preferred { outline: 1.5px dashed var(--person-ink); outline-offset: -3px; }
-.timeline-bar.is-pinned { box-shadow: inset 0 0 0 2px var(--ink); }
 
 /* ---------- Week calendar ---------- */
 /* Days across, hours down. Shifts are placed absolutely inside their day column, one hour = --hour-h. */
@@ -776,9 +747,7 @@ dialog.modal::backdrop { background: rgba(10, 10, 14, 0.4); }
   color: color-mix(in srgb, var(--person) 55%, var(--text));
 }
 .calendar-shift-time { font-size: 11.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
-.calendar-shift-pin { float: right; color: var(--ink); }
 .calendar-shift.has-not-preferred { border: 1.5px dashed var(--person); border-left: 4px solid var(--person); }
-.calendar-shift.is-pinned { box-shadow: inset 0 0 0 2px var(--ink); }
 @container (max-width: 74px) {
   .calendar-shift-time { display: none; }
   .calendar-shift-body { padding-inline: 5px; }
@@ -786,7 +755,6 @@ dialog.modal::backdrop { background: rgba(10, 10, 14, 0.4); }
 @container (max-width: 46px) {
   .calendar-shift-body { align-items: center; padding: 6px 0; }
   .calendar-shift-name { writing-mode: vertical-rl; font-size: 12px; }
-  .calendar-shift-pin { float: none; margin-bottom: 4px; }
 }
 .calendar-shift.person-alt { background-image: repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in srgb, var(--person) 22%, transparent) 4px 6px); }
 

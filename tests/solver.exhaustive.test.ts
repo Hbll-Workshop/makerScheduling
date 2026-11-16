@@ -15,15 +15,13 @@ import {
 import { compileRules } from '../src/core/rules/registry'
 import type { Rule } from '../src/core/rules/types'
 import { solve } from '../src/core/search/solver'
-import { addDays, weekDayIndex } from '../src/core/calendar'
-import { DAYS_PER_WEEK, HOURS_PER_DAY, type ProblemContext } from '../src/core/types'
+import { DAYS_PER_WEEK, type ProblemContext } from '../src/core/types'
 import {
   bruteForce,
-  FIXTURE_WEEK,
   loadFixture,
   loadPinnedSmallCafe,
   searchSpaceSize,
-  SMALL_CAFE_EXCEPTIONS,
+  SMALL_CAFE_EXTRAS,
 } from './helpers'
 
 /**
@@ -184,9 +182,9 @@ describe('branch-and-bound matches exhaustive enumeration', () => {
  * Pins and time off are implemented by narrowing the pattern lists, so the brute force above —
  * which enumerates those same lists — cannot on its own tell whether the narrowing is right.
  * These tests add an independent statement of the constraint: enumerate the *unconstrained*
- * roster and keep only schedules that visibly honour the dated entries.
+ * roster and keep only schedules that visibly honour the pins and unavailable hours.
  */
-describe('pins and time off', () => {
+describe('pins and unavailable hours', () => {
   const raw = loadFixture('small-cafe.json')
   const pinned = loadPinnedSmallCafe()
   const rawCtx = buildProblemContext(raw.employees, raw.config)
@@ -196,36 +194,13 @@ describe('pins and time off', () => {
   const maskKey = (key: string, ctx: ProblemContext) =>
     key.split(',').map((index, slot) => ctx.patterns[slot][Number(index)].mask).join(',')
 
-  /**
-   * Plain reading of the dated entries: every pinned hour worked, no hour worked during time off.
-   * Spans are walked hour by hour from their start, independently of `resolveWeek`.
-   */
+  /** Plain reading of the extras: every pinned hour worked, no unavailable hour worked. */
   const honoursExceptions = (masks: number[]): boolean => {
-    /** Whether employee `e` works `hour` on `date`, or `null` when the date is outside the week. */
-    const worked = (e: number, date: string, hour: number) => {
-      const day = weekDayIndex(FIXTURE_WEEK, date)
-      return day === null ? null : (masks[e * DAYS_PER_WEEK + day] & (1 << hour)) !== 0
-    }
+    const worked = (e: number, day: number, hour: number) => (masks[e * DAYS_PER_WEEK + day] & (1 << hour)) !== 0
     return raw.employees.every((employee, e) => {
-      const { pins, timeOff } = SMALL_CAFE_EXCEPTIONS[employee.id] ?? { pins: [], timeOff: [] }
-      for (const pin of pins) {
-        for (let hour = pin.startHour; hour < pin.endHour; hour++) {
-          if (worked(e, pin.date, hour) === false) return false
-        }
-      }
-      for (const span of timeOff) {
-        let date = span.startDate
-        let hour = span.startHour
-        while (date < span.endDate || (date === span.endDate && hour < span.endHour)) {
-          if (hour === HOURS_PER_DAY) {
-            date = addDays(date, 1)
-            hour = 0
-            continue
-          }
-          if (worked(e, date, hour) === true) return false
-          hour++
-        }
-      }
+      const { pins, unavailable } = SMALL_CAFE_EXTRAS[employee.id] ?? { pins: [], unavailable: [] }
+      for (const [day, from, to] of pins) for (let h = from; h < to; h++) if (!worked(e, day, h)) return false
+      for (const [day, from, to] of unavailable) for (let h = from; h < to; h++) if (worked(e, day, h)) return false
       return true
     })
   }

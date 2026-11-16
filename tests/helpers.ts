@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { resolveWeek, type EmployeeExceptions } from '../src/core/calendar'
 import { parseScenario, type Scenario, type ScenarioJson } from '../src/core/io'
 import { scoreComplete } from '../src/core/rules/registry'
 import type { CompiledRuleSet, Rule } from '../src/core/rules/types'
@@ -19,28 +18,36 @@ export function loadFixture(name: string): Scenario {
   return parseScenario(JSON.parse(readFileSync(path, 'utf8')) as ScenarioJson)
 }
 
-/** Monday of the week the dated fixture exceptions below are written against. */
-export const FIXTURE_WEEK = '2026-09-21'
+/** `[day, startHour, endHour)`, with 0 = Monday. */
+export type DayHours = [day: number, startHour: number, endHour: number]
 
 /**
- * Dated exceptions for `small-cafe.json` (open Mon and Tue, 9am–3pm), exercising every kind:
- * a pin that removes Ana's Monday day-off and forces an early start, time off for Ben running
- * from the start of Tuesday through the closed Wednesday, a single pinned hour for Cleo that
- * several shifts can cover, and a multi-day span in a later week that must be ignored.
+ * Must-work hours and unavailable hours for `small-cafe.json` (open Mon and Tue, 9am–3pm),
+ * exercising the core solver's pinned-hours constraint: a pin that removes Ana's Monday day-off and
+ * forces an early start, Ben unavailable all of Tuesday and the closed Wednesday, and a single
+ * pinned hour for Cleo that several shifts can cover.
  */
-export const SMALL_CAFE_EXCEPTIONS: Record<string, EmployeeExceptions> = {
-  ana: {
-    pins: [{ date: '2026-09-21', startHour: 9, endHour: 11 }],
-    timeOff: [{ startDate: '2026-09-29', startHour: 14, endDate: '2026-10-01', endHour: 11 }],
-  },
-  ben: { pins: [], timeOff: [{ startDate: '2026-09-22', startHour: 0, endDate: '2026-09-23', endHour: 24 }] },
-  cleo: { pins: [{ date: '2026-09-22', startHour: 13, endHour: 14 }], timeOff: [] },
+export const SMALL_CAFE_EXTRAS: Record<string, { pins: DayHours[]; unavailable: DayHours[] }> = {
+  ana: { pins: [[0, 9, 11]], unavailable: [] },
+  ben: { pins: [], unavailable: [[1, 0, 24], [2, 0, 24]] },
+  cleo: { pins: [[1, 13, 14]], unavailable: [] },
 }
 
-/** `small-cafe.json` with {@link SMALL_CAFE_EXCEPTIONS} applied for {@link FIXTURE_WEEK}. */
+/** `small-cafe.json` with {@link SMALL_CAFE_EXTRAS} applied. */
 export function loadPinnedSmallCafe(): { employees: Employee[]; config: ScheduleConfig } {
   const { employees, config } = loadFixture('small-cafe.json')
-  return { employees: resolveWeek(employees, FIXTURE_WEEK, SMALL_CAFE_EXCEPTIONS), config }
+  return {
+    config,
+    employees: employees.map((e) => {
+      const extras = SMALL_CAFE_EXTRAS[e.id]
+      if (!extras) return e
+      const availability = e.availability.slice()
+      const pinned = new Uint8Array(WEEK_HOURS)
+      for (const [day, from, to] of extras.unavailable) for (let h = from; h < to; h++) availability[day * HOURS_PER_DAY + h] = 0
+      for (const [day, from, to] of extras.pins) for (let h = from; h < to; h++) pinned[day * HOURS_PER_DAY + h] = 1
+      return { ...e, availability, pinned }
+    }),
+  }
 }
 
 /** Deterministic LCG, so a failing property test reproduces exactly from its seed. */

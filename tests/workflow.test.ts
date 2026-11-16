@@ -4,7 +4,6 @@ import { applyLevel, levelOf } from '../src/app/priorities'
 import { parseRoute, routeHash, type Route } from '../src/app/routes'
 import {
   copyDayCoverage,
-  excludedFor,
   fillEmptyOpenHours,
   normaliseProject,
   openSlots,
@@ -12,10 +11,8 @@ import {
   projectFromScenario,
   projectToProblem,
   removeSavedSchedule,
-  saveWeekSchedule,
+  saveSchedule,
   savedRows,
-  savedScheduleFor,
-  setWeekStart,
   setWorking,
   windowsFromCoverage,
   workingEmployees,
@@ -31,9 +28,9 @@ import { solve } from '../src/core/search/solver'
 import { slotIndex, type Schedule } from '../src/core/types'
 import { handleRequest } from '../src/worker/handler'
 import type { SolveResponse } from '../src/worker/protocol'
-import { FIXTURE_WEEK, loadFixture } from './helpers'
+import { loadFixture } from './helpers'
 
-const cafe = (): Project => projectFromScenario({ ...loadFixture('small-cafe.json'), name: 'Small Cafe', weekStart: FIXTURE_WEEK })
+const cafe = (): Project => projectFromScenario({ ...loadFixture('small-cafe.json'), name: 'Small Cafe' })
 
 /** Blocks for small-cafe's three employees (ana, ben, cleo), in roster order. */
 const fakeSchedule = (score = 80): Schedule => ({
@@ -51,53 +48,46 @@ const fakeSchedule = (score = 80): Schedule => ({
   penalties: {},
 })
 
-describe('saved schedules', () => {
-  it('stores dated shifts with names and the whole team, sorted by date', () => {
+describe('saved schedule', () => {
+  it('stores shifts by weekday with names and the whole team, sorted by day', () => {
     const project = cafe()
-    const next = saveWeekSchedule(project, project, fakeSchedule(), new Date('2026-09-20T10:00:00Z'))
-    const saved = savedScheduleFor(next, FIXTURE_WEEK)!
+    const saved = saveSchedule(project, project, fakeSchedule(), new Date('2026-09-20T10:00:00Z')).saved!
     expect(saved.score).toBe(80)
     expect(saved.savedAt).toBe('2026-09-20T10:00:00.000Z')
     expect(saved.team.map((m) => m.employeeId)).toEqual(project.employees.map((e) => e.id))
-    expect(saved.shifts.map((s) => [s.employeeName, s.date, s.startHour, s.endHour])).toEqual([
-      [project.employees[0].name, '2026-09-21', 9, 13],
-      [project.employees[1].name, '2026-09-21', 12, 15],
-      [project.employees[1].name, '2026-09-22', 11, 15],
+    expect(saved.shifts.map((s) => [s.employeeName, s.day, s.startHour, s.endHour])).toEqual([
+      [project.employees[0].name, 0, 9, 13],
+      [project.employees[1].name, 0, 12, 15],
+      [project.employees[1].name, 1, 11, 15],
     ])
     expect(savedRows(saved).map((r) => r.hours)).toEqual([4, 7, 0])
   })
 
-  it('keeps one schedule per week, in week order', () => {
+  it('keeps one schedule, replaced by the next one chosen', () => {
     const project = cafe()
-    const nextWeek = { ...project, weekStart: '2026-09-28' }
-    let p = saveWeekSchedule(project, nextWeek, fakeSchedule(70))
-    p = saveWeekSchedule(p, project, fakeSchedule(60))
-    p = saveWeekSchedule(p, project, fakeSchedule(90))
-    expect(p.saved.map((s) => [s.weekStart, s.score])).toEqual([
-      ['2026-09-21', 90],
-      ['2026-09-28', 70],
-    ])
-    expect(removeSavedSchedule(p, '2026-09-21').saved.map((s) => s.weekStart)).toEqual(['2026-09-28'])
+    let p = saveSchedule(project, project, fakeSchedule(70))
+    p = saveSchedule(p, project, fakeSchedule(90))
+    expect(p.saved?.score).toBe(90)
+    expect(removeSavedSchedule(p).saved).toBeNull()
   })
 
-  it('survives a storage round trip, and older saves load without any', () => {
-    const project = saveWeekSchedule(cafe(), cafe(), fakeSchedule())
+  it('survives a storage round trip', () => {
+    const project = saveSchedule(cafe(), cafe(), fakeSchedule())
     expect(normaliseProject(JSON.parse(JSON.stringify(project)))!.saved).toEqual(project.saved)
-
-    const { saved: _saved, ...older } = JSON.parse(JSON.stringify(cafe()))
-    expect(normaliseProject(older)!.saved).toEqual([])
   })
 
   it('rejects a malformed saved schedule', () => {
-    const project = JSON.parse(JSON.stringify(saveWeekSchedule(cafe(), cafe(), fakeSchedule())))
-    project.saved[0].shifts[0].endHour = 30
+    const project = JSON.parse(JSON.stringify(saveSchedule(cafe(), cafe(), fakeSchedule())))
+    project.saved.shifts[0].endHour = 30
+    expect(normaliseProject(project)).toBeNull()
+    project.saved.shifts[0].endHour = 13
+    project.saved.shifts[0].day = 7
     expect(normaliseProject(project)).toBeNull()
   })
 })
 
 describe('schedule CSV', () => {
   const saved: SavedSchedule = {
-    weekStart: '2026-09-21',
     savedAt: '2026-09-20T10:00:00.000Z',
     score: 80,
     team: [
@@ -105,17 +95,17 @@ describe('schedule CSV', () => {
       { employeeId: 'b', employeeName: 'Ben', targetWeeklyHours: 8 },
     ],
     shifts: [
-      { employeeId: 'a', employeeName: 'Smith, "Jo"', date: '2026-09-21', startHour: 9, endHour: 13 },
-      { employeeId: 'a', employeeName: 'Smith, "Jo"', date: '2026-09-21', startHour: 17, endHour: 24 },
+      { employeeId: 'a', employeeName: 'Smith, "Jo"', day: 0, startHour: 9, endHour: 13 },
+      { employeeId: 'a', employeeName: 'Smith, "Jo"', day: 0, startHour: 17, endHour: 24 },
     ],
-    offDesk: [{ employeeId: 'b', employeeName: 'Ben', date: '2026-09-21', startHour: 13, endHour: 16 }],
+    offDesk: [{ employeeId: 'b', employeeName: 'Ben', day: 0, startHour: 13, endHour: 16 }],
   }
 
   it('writes a week grid with quoting, a BOM and CRLF', () => {
     const csv = weekGridCsv(saved)
     expect(csv.startsWith('﻿')).toBe(true)
     const lines = csv.slice(1).split('\r\n')
-    expect(lines[0]).toBe('Employee,Mon 21 Sep,Tue 22 Sep,Wed 23 Sep,Thu 24 Sep,Fri 25 Sep,Sat 26 Sep,Sun 27 Sep,Desk hours,Off-desk hours,Total hours')
+    expect(lines[0]).toBe('Employee,Mon,Tue,Wed,Thu,Fri,Sat,Sun,Desk hours,Off-desk hours,Total hours')
     expect(lines[1]).toBe('"Smith, ""Jo""",9am-1pm; 5pm-12am,,,,,,,11,0,11')
     expect(lines[2]).toBe('Ben,1pm-4pm (off desk),,,,,,,0,3,3')
     expect(lines[3]).toBe('')
@@ -123,15 +113,15 @@ describe('schedule CSV', () => {
 
   it('writes a shift list with 24-hour times', () => {
     const lines = shiftListCsv(saved).slice(1).split('\r\n')
-    expect(lines[0]).toBe('Employee,Date,Day,Start,End,Hours,Type')
-    expect(lines[1]).toBe('"Smith, ""Jo""",2026-09-21,Mon,09:00,13:00,4,Desk')
-    expect(lines[2]).toBe('Ben,2026-09-21,Mon,13:00,16:00,3,Off desk')
-    expect(lines[3]).toBe('"Smith, ""Jo""",2026-09-21,Mon,17:00,00:00,7,Desk')
+    expect(lines[0]).toBe('Employee,Day,Start,End,Hours,Type')
+    expect(lines[1]).toBe('"Smith, ""Jo""",Mon,09:00,13:00,4,Desk')
+    expect(lines[2]).toBe('Ben,Mon,13:00,16:00,3,Off desk')
+    expect(lines[3]).toBe('"Smith, ""Jo""",Mon,17:00,00:00,7,Desk')
   })
 
-  it('names files after the project and week', () => {
-    expect(scheduleFileName('  Small Café! ', '2026-09-21', 'grid')).toBe('small-caf-schedule-2026-09-21.csv')
-    expect(scheduleFileName('', '2026-09-21', 'shifts')).toBe('schedule-shifts-2026-09-21.csv')
+  it('names files after the project', () => {
+    expect(scheduleFileName('  Small Café! ', 'grid')).toBe('small-caf-schedule.csv')
+    expect(scheduleFileName('', 'shifts')).toBe('schedule-shifts.csv')
   })
 })
 
@@ -167,11 +157,11 @@ describe('undo history', () => {
 })
 
 describe('steps', () => {
-  it('tracks progress through the week', () => {
+  it('tracks progress through the steps', () => {
     const project = cafe()
     expect(stepStates(project, false)).toEqual({ employees: 'done', coverage: 'done', generate: 'todo', schedule: 'todo' })
     expect(stepStates(project, true).generate).toBe('done')
-    expect(stepStates(saveWeekSchedule(project, project, fakeSchedule()), true).schedule).toBe('done')
+    expect(stepStates(saveSchedule(project, project, fakeSchedule()), true).schedule).toBe('done')
   })
 
   it('flags an unbuildable project and an empty one', () => {
@@ -219,40 +209,22 @@ describe('best-options build', () => {
   })
 })
 
-describe('who works which week', () => {
-  it('starts with everyone, and a week carries over into later weeks', () => {
+describe('who is on the schedule', () => {
+  it('starts with everyone, and leaves people taken off out of the solve', () => {
     const project = cafe()
-    const [ana, ben] = project.employees
     expect(workingEmployees(project)).toHaveLength(3)
-
-    let p = setWorking(project, ben.id, false)
-    expect(workingEmployees(p).map((e) => e.id)).not.toContain(ben.id)
-    p = setWeekStart(p, '2026-10-05')
-    expect(excludedFor(p, p.weekStart)).toEqual([ben.id])
-
-    // A change in a later week leaves the earlier one alone.
-    p = setWorking(p, ana.id, false)
-    expect(excludedFor(p, '2026-09-21')).toEqual([ben.id])
-    expect(excludedFor(p, '2026-10-12').sort()).toEqual([ana.id, ben.id].sort())
-    // Weeks before any entry have everyone.
-    expect(excludedFor(p, '2026-09-14')).toEqual([])
+    const p = setWorking(project, project.employees[1].id, false)
+    expect(workingEmployees(p).map((e) => e.id)).toEqual([project.employees[0].id, project.employees[2].id])
+    expect(projectToProblem(p).employees.map((e) => e.id)).toEqual(workingEmployees(p).map((e) => e.id))
+    expect(normaliseProject(JSON.parse(JSON.stringify(p)))!.employees[1].working).toBe(false)
   })
 
-  it('leaves excluded people out of the solve and lines results up with who is working', () => {
+  it('lines saved shifts up with who is working', () => {
     const project = setWorking(cafe(), cafe().employees[0].id, false)
-    const { employees } = projectToProblem(project)
-    expect(employees.map((e) => e.id)).toEqual(workingEmployees(project).map((e) => e.id))
-
     const schedule: Schedule = { ...fakeSchedule(), blocks: [[{ day: 0, startHour: 9, endHour: 12 }], []], hoursPerEmployee: [3, 0] }
-    const saved = savedScheduleFor(saveWeekSchedule(project, project, schedule), FIXTURE_WEEK)!
+    const saved = saveSchedule(project, project, schedule).saved!
     expect(saved.team.map((m) => m.employeeId)).toEqual(workingEmployees(project).map((e) => e.id))
     expect(saved.shifts[0].employeeId).toBe(workingEmployees(project)[0].id)
-  })
-
-  it('round-trips through storage and rejects a bad week key', () => {
-    const project = setWorking(cafe(), cafe().employees[1].id, false)
-    expect(normaliseProject(JSON.parse(JSON.stringify(project)))!.excluded).toEqual(project.excluded)
-    expect(normaliseProject({ ...project, excluded: { '2026-09-22': [] } })).toBeNull()
   })
 })
 
@@ -279,7 +251,7 @@ describe('routes', () => {
   it('round-trips every page through the URL hash', () => {
     const routes: Route[] = [
       { page: 'employees' },
-      { page: 'employee', id: 'ana lee', tab: 'time-off' },
+      { page: 'employee', id: 'ana lee', tab: 'availability' },
       { page: 'coverage' },
       { page: 'generate' },
       { page: 'schedule' },
@@ -297,7 +269,7 @@ describe('routes', () => {
 })
 
 describe('person colours', () => {
-  it('keeps each person\'s colour when someone is left out of the week', () => {
+  it('keeps each person\'s colour when someone is taken off the schedule', () => {
     const project = cafe()
     const ids = project.employees.map((e) => e.id)
     const without = workingEmployees(setWorking(project, ids[0], false)).map((e) => e.id)

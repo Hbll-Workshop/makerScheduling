@@ -1,17 +1,7 @@
 import { useState } from 'react'
-import { addDays, formatWeekRange, weekDayIndex } from '../../core/calendar'
+import { DAY_NAMES } from '../../core/types'
 import { downloadFile } from '../download'
-import {
-  dayLabelsFor,
-  removeSavedSchedule,
-  savedRows,
-  savedScheduleFor,
-  setWeekStart,
-  shiftHours,
-  type Project,
-  type ProjectUpdate,
-  type SavedSchedule,
-} from '../project'
+import { blockOf, removeSavedSchedule, savedRows, type Project, type ProjectUpdate, type SavedSchedule } from '../project'
 import type { Route } from '../routes'
 import { scheduleFileName, shiftListCsv, weekGridCsv } from '../scheduleCsv'
 import { colorSlots } from '../people'
@@ -33,120 +23,73 @@ interface SchedulePanelProps {
   project: Project
   update: ProjectUpdate
   navigate: (route: Route) => void
-  onStartNextWeek: () => void
 }
 
-/** The end of the weekly loop: the chosen schedule, ways to get it out, and the weeks before. */
-export function SchedulePanel({ project, update, navigate, onStartNextWeek }: SchedulePanelProps) {
-  const [removing, setRemoving] = useState<SavedSchedule | null>(null)
-  const current = savedScheduleFor(project, project.weekStart)
-  const others = project.saved.filter((s) => s.weekStart !== project.weekStart).reverse()
-  const nextWeek = formatWeekRange(addDays(project.weekStart, 7))
+/** The end of the steps: the chosen weekly schedule, its off-desk hours, and ways to get it out. */
+export function SchedulePanel({ project, update, navigate }: SchedulePanelProps) {
+  const [removing, setRemoving] = useState(false)
+  const saved = project.saved
 
-  const download = (saved: SavedSchedule, kind: 'grid' | 'shifts') =>
-    downloadFile(
-      scheduleFileName(project.name, saved.weekStart, kind),
-      kind === 'grid' ? weekGridCsv(saved) : shiftListCsv(saved),
-      'text/csv;charset=utf-8',
+  if (!saved) {
+    return (
+      <Card title="No schedule saved yet" description="Generate schedules, then choose “Use this schedule” on the one you want.">
+        <div className="row">
+          <button type="button" className="btn btn--primary" onClick={() => navigate({ page: 'generate' })}>
+            <Icon name="play" size={14} /> Go to Generate
+          </button>
+        </div>
+      </Card>
     )
+  }
 
-  const csvMenu = (saved: SavedSchedule, compact = false) => (
-    <Menu
-      label={`Download ${formatWeekRange(saved.weekStart)} as CSV`}
-      trigger={
-        <>
-          <Icon name="download" size={14} /> {compact ? 'CSV' : 'Download CSV'} <Icon name="chevronDown" size={14} />
-        </>
-      }
-      triggerClassName={compact ? 'btn btn--sm' : 'btn'}
-      entries={[
-        { label: 'Week grid (one row per person)', icon: 'calendar', onSelect: () => download(saved, 'grid') },
-        { label: 'Shift list (one row per shift)', icon: 'clipboard', onSelect: () => download(saved, 'shifts') },
-      ]}
-    />
-  )
+  const download = (kind: 'grid' | 'shifts') =>
+    downloadFile(scheduleFileName(project.name, kind), kind === 'grid' ? weekGridCsv(saved) : shiftListCsv(saved), 'text/csv;charset=utf-8')
 
   return (
     <div className="stack">
-      {current ? (
-        <Card
-          title={`Schedule for ${formatWeekRange(current.weekStart)}`}
-          description={`Saved ${savedOn(current.savedAt)} · score ${score(current.score)}`}
-          actions={
-            <>
-              {csvMenu(current)}
-              <button type="button" className="btn btn--primary" onClick={onStartNextWeek}>
-                Start next week <Icon name="arrowRight" size={14} />
-              </button>
-            </>
-          }
-        >
-          <SavedShifts project={project} saved={current} />
-          <div className="row">
-            <span className="hint">Want a different one?</span>
-            <button type="button" className="btn btn--sm" onClick={() => navigate({ page: 'generate' })}>Generate again</button>
-            <span className="spacer" />
-            <button type="button" className="btn btn--ghost btn--sm btn--danger" onClick={() => setRemoving(current)}>
-              <Icon name="trash" size={14} /> Remove
-            </button>
-          </div>
-        </Card>
-      ) : null}
-      {current ? (
-        <OffDeskPanel key={current.weekStart} project={project} update={update} navigate={navigate} saved={current} />
-      ) : (
-        <Card title={`No schedule saved for ${formatWeekRange(project.weekStart)}`} description="Generate schedules, then choose “Use this schedule” on the one you want.">
-          <div className="row">
-            <button type="button" className="btn btn--primary" onClick={() => navigate({ page: 'generate' })}>
-              <Icon name="play" size={14} /> Go to Generate
-            </button>
-            <span className="hint">or skip ahead to plan the week of {nextWeek}:</span>
-            <button type="button" className="btn btn--sm" onClick={onStartNextWeek}>Start next week</button>
-          </div>
-        </Card>
-      )}
-
-      <Card title="Other weeks" description={others.length ? 'Schedules you saved for other weeks.' : 'Saved schedules for other weeks will appear here.'} flush={others.length > 0}>
-        {others.length > 0 && (
-          <ul className="history-list">
-            {others.map((saved) => {
-              const hours = shiftHours(saved.shifts)
-              const offDesk = shiftHours(saved.offDesk)
-              return (
-                <li key={saved.weekStart} className="history-item">
-                  <div className="history-text">
-                    <span className="history-week">{formatWeekRange(saved.weekStart)}</span>
-                    <span className="hint">
-                      {hours} staff hours{offDesk > 0 && ` + ${offDesk} off desk`} · score {score(saved.score)} · saved {savedOn(saved.savedAt)}
-                    </span>
-                  </div>
-                  <div className="history-actions">
-                    <button type="button" className="btn btn--sm" onClick={() => update((p) => setWeekStart(p, saved.weekStart))}>Open</button>
-                    {csvMenu(saved, true)}
-                    <button type="button" className="btn btn--ghost btn--icon btn--sm" aria-label={`Remove the schedule for ${formatWeekRange(saved.weekStart)}`} title="Remove" onClick={() => setRemoving(saved)}>
-                      <Icon name="trash" size={14} />
-                    </button>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        )}
+      <Card
+        title="Weekly schedule"
+        description={`Saved ${savedOn(saved.savedAt)} · score ${score(saved.score)}. The same every week.`}
+        actions={
+          <Menu
+            label="Download the schedule as CSV"
+            trigger={
+              <>
+                <Icon name="download" size={14} /> Download CSV <Icon name="chevronDown" size={14} />
+              </>
+            }
+            triggerClassName="btn btn--primary"
+            entries={[
+              { label: 'Week grid (one row per person)', icon: 'calendar', onSelect: () => download('grid') },
+              { label: 'Shift list (one row per shift)', icon: 'clipboard', onSelect: () => download('shifts') },
+            ]}
+          />
+        }
+      >
+        <SavedShifts project={project} saved={saved} />
+        <div className="row">
+          <span className="hint">Want a different one?</span>
+          <button type="button" className="btn btn--sm" onClick={() => navigate({ page: 'generate' })}>Generate again</button>
+          <span className="spacer" />
+          <button type="button" className="btn btn--ghost btn--sm btn--danger" onClick={() => setRemoving(true)}>
+            <Icon name="trash" size={14} /> Remove
+          </button>
+        </div>
       </Card>
 
+      <OffDeskPanel project={project} update={update} navigate={navigate} saved={saved} />
+
       <ConfirmDialog
-        open={removing !== null}
-        title="Remove this saved schedule?"
+        open={removing}
+        title="Remove the saved schedule?"
         confirmLabel="Remove"
         onConfirm={() => {
-          if (removing) update((p) => removeSavedSchedule(p, removing.weekStart))
-          setRemoving(null)
+          update(removeSavedSchedule)
+          setRemoving(false)
         }}
-        onCancel={() => setRemoving(null)}
+        onCancel={() => setRemoving(false)}
       >
-        <p className="hint">
-          The schedule for {removing ? formatWeekRange(removing.weekStart) : ''} will be deleted. You can undo this straight after.
-        </p>
+        <p className="hint">The saved schedule and its off-desk hours will be deleted. You can undo this straight after.</p>
       </ConfirmDialog>
     </div>
   )
@@ -156,17 +99,14 @@ function SavedShifts({ project, saved }: { project: Project; saved: SavedSchedul
   const slots = colorSlots(project, saved.team.map((m) => m.employeeId))
   return (
     <ScheduleShifts
-      dayLabels={dayLabelsFor(saved.weekStart)}
+      dayLabels={DAY_NAMES}
       rows={savedRows(saved).map((row, i) => ({
         key: row.employeeId,
         name: row.employeeName,
         hours: row.hours,
         target: row.targetWeeklyHours,
         slot: slots[i],
-        blocks: [
-          ...row.shifts.map((s) => ({ day: weekDayIndex(saved.weekStart, s.date) ?? 0, startHour: s.startHour, endHour: s.endHour })),
-          ...row.offDesk.map((s) => ({ day: weekDayIndex(saved.weekStart, s.date) ?? 0, startHour: s.startHour, endHour: s.endHour, offDesk: true })),
-        ],
+        blocks: [...row.shifts.map(blockOf), ...row.offDesk.map((s) => ({ ...blockOf(s), offDesk: true }))],
       }))}
     />
   )

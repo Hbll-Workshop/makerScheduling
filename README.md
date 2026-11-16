@@ -16,21 +16,20 @@ npm run solve -- src/fixtures/small-cafe.json   # the same solver from the comma
 
 ## Using the app
 
-The app is four steps, shown across the top bar next to the **week switcher**. The week
-switcher picks the week everything applies to: who's working, time off and pins, the schedules
-generated, and the one saved. Each page has its own address (`#/employees`, `#/coverage`, …), so
-the browser's Back button and bookmarks work. **Back** / **Next** at the foot of each step move
-along, and a step gets a check mark once it's done for that week.
+The app builds one weekly schedule, which repeats unchanged for as long as you use it. There are
+no dates: a project is one week's pattern and the schedule chosen for it. To plan a different
+term, make or duplicate a project from the project switcher.
 
-1. **Employees** — tick who's working this week. A week starts with the same people as the week
-   before (everyone, the first time), and new hires start ticked. **New employee** adds someone;
-   **Open** goes to a person's own page, which has three tabs:
-   - **Details** — name, target and maximum weekly hours, working this week, duplicate, delete.
-   - **Usual availability** — paint their normal week as preferred, not preferred, or unavailable.
-   - **Time off & pins** — time off as a start and an end, which can run across several days;
-     and must-work hours for the week shown, painted with the Pin brush (see
-     [Time off and pins](#time-off-and-pins)).
-2. **Coverage** — how many people you need each hour, the same every week. Pick a number and drag
+The app is four steps, shown in the sidebar. Each page has its own address (`#/employees`,
+`#/coverage`, …), so the browser's Back button and bookmarks work. **Back** / **Next** at the
+foot of each step move along, and a step gets a check mark once it's done.
+
+1. **Employees** — tick who's on the schedule; unticking keeps someone on the team without
+   scheduling them. New hires start ticked. **New employee** adds someone; **Open** goes to a
+   person's own page, which has two tabs:
+   - **Details** — name, target and maximum weekly hours, on the schedule or not, duplicate, delete.
+   - **Availability** — paint their week as preferred, not preferred, or unavailable.
+2. **Coverage** — how many people you need each hour. Pick a number and drag
    across the grid; **Closed** (0) marks hours nobody is needed. Opening hours follow from it: each
    day opens at its first hour needing someone and closes after its last.
 3. **Generate** — one click finds the best few schedules (10 by default), with a **Search time**
@@ -38,23 +37,22 @@ along, and a step gets a check mark once it's done for that week.
    staffing by hour, then choose **Use this schedule**. Shifts show as a **Timeline** (hours
    across the top, one bar per shift in that person's colour) or as a **Table** of people by day. Under **Advanced**, the original mode keeps
    every schedule above a minimum score, with **Find achievable score** to pick that minimum.
-4. **Schedule** — the week's saved schedule, **Download CSV** (a week grid with one row per
-   person, or a shift list with one row per shift), and **Start next week**, which moves the week
-   on and goes back to Employees. Schedules saved for other weeks are listed below it.
+4. **Schedule** — the saved weekly schedule, its off-desk hours, and **Download CSV** (a week grid
+   with one row per person and a column per weekday, or a shift list with one row per shift).
 
 **Settings** (the gear in the top bar) holds what's set once and rarely touched: **Shift rules**
 (shift lengths, daily hours, split shifts) and **Priorities** (each thing to avoid at Off, Low,
 Normal or High, which are multiples of the rule's default weight; **Show exact weights** reveals
 the numbers).
 
-**The weekly routine** is therefore: Employees (who's in, anyone's time off) → Generate → Use this
-schedule → Download CSV → Start next week. Coverage only needs revisiting when your hours change.
+**The routine** is therefore: Employees (who's in, their availability) → Coverage → Generate →
+Use this schedule → Download CSV. Come back when the team or the hours change.
 
-Everything autosaves in the browser (`localStorage`), including saved schedules. **Undo** and
+Everything autosaves in the browser (`localStorage`), including the saved schedule. **Undo** and
 **Redo** sit in the top bar (Ctrl/Cmd+Z, Shift+Ctrl/Cmd+Z); a paint stroke undoes in one step.
 The sun/moon button beside the gear switches between light and dark; until it's used, the app
 follows the device. The **Project** menu starts a new project, loads an example, and handles
-files: **Save backup file** writes the whole project including saved schedules, **Open backup file** reads that or
+files: **Save backup file** writes the whole project including the saved schedule, **Open backup file** reads that or
 a scenario file, and **Export for command line** writes the scenario format the CLI reads.
 
 The solver runs in a Web Worker, so the page stays responsive during a long search. **Stop**
@@ -118,7 +116,7 @@ don't share data. Move a project across with **Save backup file** / **Open backu
 
 There are two kinds of shift. **Desk** shifts are what Generate builds to meet coverage.
 **Off-desk** shifts are paid hours away from the desk, drawn from a fixed weekly budget shared by
-the whole team (**Settings → Off-desk hours**; the same every week, 0 turns it off). They never
+the whole team (**Settings → Off-desk hours**; 0 turns it off). They never
 count toward coverage.
 
 When you choose **Use this schedule**, off-desk hours are suggested for everyone the desk
@@ -134,30 +132,6 @@ Remove a shift with its ×, add one by person, day and time, **Suggest again** t
 the current budget and roster, or **Clear**. Off-desk shifts show dotted and hatched in the
 calendar and are marked in both CSVs (the week grid adds desk, off-desk and total hour columns;
 the shift list adds a Type column).
-
-## Time off and pins
-
-Availability describes a person's *usual* week. Time off and pins are tied to **calendar dates**
-and only apply when their date falls in the week being scheduled. Entries for other weeks are kept,
-so vacations can be entered ahead of time.
-
-- **Time off** runs from a start date and time to an end date and time, as one continuous block.
-  "Tue 2pm → Thu 11am" is off from Tuesday afternoon straight through to Thursday morning. Those
-  hours become unavailable, overriding availability; a span crossing into or out of the week
-  counts only the part inside it.
-- **A pin** means the person *must work at least* those hours. The solver may start earlier, end
-  later, or add a second block on a split-shift day. A pinned day can't be a day off. Pins are
-  painted onto the grid and saved against the dates of the week on screen; painting across a few
-  hours stores them as one run.
-
-Both are hard constraints, never scored. A pin that can't be honoured is reported before any
-search runs: outside opening hours, during time off or unavailable hours, longer than any legal
-shift, or more pinned hours than the weekly maximum.
-
-The solver itself knows nothing about dates. `resolveWeek` (`src/core/calendar.ts`) turns the
-dated entries into that week's availability grid plus a `pinned` grid. Pattern enumeration then
-keeps only the day-patterns that cover every pinned hour, so pins shrink the search rather than
-filtering its results.
 
 ---
 
@@ -276,7 +250,7 @@ Tight-bound rules drive most of the pruning; weak-bound rules are correct but co
 until deep in the tree.
 
 **Hard constraints are never rules** and are never scored: coverage minimums, `maxWeeklyHours`,
-availability and time off, pins, shift-length bounds, gap bounds, `maxDailyHours`.
+availability, pinned hours, shift-length bounds, gap bounds, `maxDailyHours`.
 
 ---
 
@@ -318,43 +292,23 @@ Scenario files use hour ranges rather than 168-entry grids. Anything not listed 
 }
 ```
 
-`minCoverage` also accepts per-day ranges: `{ "Mon": [[8, 11, 1], [11, 14, 3]] }`.
-
-Dated entries need a top-level `weekStart`, which must be a Monday. Time off is either one
-`date` (optionally just `hours` of it) or a stretch `from` one date `to` another. `fromHour`
-defaults to the start of `from`; without `toHour` it runs to the end of `to`:
-
-```json
-{
-  "weekStart": "2026-09-21",
-  "employees": [
-    {
-      "id": "ana", "name": "Ana", "maxWeeklyHours": 12, "targetWeeklyHours": 8,
-      "preferred": { "Mon": [[9, 15]], "Tue": [[9, 13]] },
-      "timeOff": [
-        { "date": "2026-09-22" },
-        { "date": "2026-10-05", "hours": [9, 12] },
-        { "from": "2026-10-13", "to": "2026-10-15", "fromHour": 14, "toHour": 11 }
-      ],
-      "pins": [{ "date": "2026-09-21", "hours": [9, 11] }]
-    }
-  ]
-}
-```
+`minCoverage` also accepts per-day ranges: `{ "Mon": [[8, 11, 1], [11, 14, 3]] }`. Files from
+earlier versions may carry `weekStart`, `timeOff` and `pins`; they're ignored.
 
 ---
 
 ## Verification
 
-`npm test` — 210 tests. Three carry the correctness argument:
+`npm test` — 214 tests. Three carry the correctness argument:
 
 **`tests/solver.exhaustive.test.ts` — brute force vs. branch-and-bound.** On a fixture sized so
 full enumeration is feasible, the answer is computed twice: once by naive exhaustion with no
 pruning at all, once by the real solver. The two sets must be *identical*, across six rule
 configurations and a range of thresholds. If any bound is ever too aggressive, this names the
-schedules that were wrongly discarded. It repeats the check with pins and time off applied. Because
-those work by narrowing the pattern lists, it also enumerates the *unconstrained* roster, keeps only
-the schedules that visibly honour the dated entries, and requires the same set.
+schedules that were wrongly discarded. It repeats the check with the solver core's must-work
+(pinned) hours and extra unavailable hours applied. Because pins work by narrowing the pattern
+lists, it also enumerates the *unconstrained* roster, keeps only the schedules that visibly honour
+them, and requires the same set.
 
 **`tests/rules.monotonicity.test.ts` — property tests per rule.** Random root-to-leaf walks
 assert non-negativity, monotonicity, and exactness at completion for every rule individually.
@@ -378,7 +332,6 @@ schedule re-validated against the hard constraints from scratch.
 ```
 src/core/types.ts              model and constants
 src/core/config.ts             defaults, validation of impossible rosters (including pins)
-src/core/calendar.ts           dates; applies a week's time off and pins to the roster
 src/core/patterns.ts           legal day-pattern enumeration, problem context
 src/core/state.ts              incremental search state (apply / undo)
 src/core/rules/                Rule interface, built-ins, compilation, serializable catalog
@@ -388,15 +341,15 @@ src/core/report.ts             top-K heap, search report, formatting
 src/core/io.ts                 scenario file parsing and serialization
 src/cli.ts                     dev harness
 src/app/project.ts             editor model: plain-data project, edits, saved schedules, persistence
-src/app/steps.ts               the four steps and whether each is done for the week
+src/app/steps.ts               the four steps and whether each is done
 src/app/routes.ts              pages and their URL hashes
 src/app/priorities.ts          Off/Low/Normal/High ↔ rule weights
 src/app/theme.ts               light / dark mode, following the device until switched
 src/app/scheduleCsv.ts         CSV exports of a saved schedule
 src/app/useUndoable.ts         undo/redo history
 src/app/useSolver.ts           owns the solver worker (progress, cancel, results)
-src/app/people.ts              initials, week notes, and each person's colour slot
-src/app/components/            one component per page; stepper, week switcher, grids, shift table and timeline
+src/app/people.ts              initials and each person's colour slot
+src/app/components/            one component per page; stepper, grids, shift table and timeline
 src/worker/                    worker entry, message protocol, request handler
 electron/main.js               desktop shell: one window serving dist/ over app://
 build/                         desktop icon (svg source, png, ico)
