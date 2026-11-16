@@ -108,23 +108,25 @@ describe('schedule CSV', () => {
       { employeeId: 'a', employeeName: 'Smith, "Jo"', date: '2026-09-21', startHour: 9, endHour: 13 },
       { employeeId: 'a', employeeName: 'Smith, "Jo"', date: '2026-09-21', startHour: 17, endHour: 24 },
     ],
+    offDesk: [{ employeeId: 'b', employeeName: 'Ben', date: '2026-09-21', startHour: 13, endHour: 16 }],
   }
 
   it('writes a week grid with quoting, a BOM and CRLF', () => {
     const csv = weekGridCsv(saved)
     expect(csv.startsWith('﻿')).toBe(true)
     const lines = csv.slice(1).split('\r\n')
-    expect(lines[0]).toBe('Employee,Mon 21 Sep,Tue 22 Sep,Wed 23 Sep,Thu 24 Sep,Fri 25 Sep,Sat 26 Sep,Sun 27 Sep,Total hours')
-    expect(lines[1]).toBe('"Smith, ""Jo""",9am-1pm; 5pm-12am,,,,,,,11')
-    expect(lines[2]).toBe('Ben,,,,,,,,0')
+    expect(lines[0]).toBe('Employee,Mon 21 Sep,Tue 22 Sep,Wed 23 Sep,Thu 24 Sep,Fri 25 Sep,Sat 26 Sep,Sun 27 Sep,Desk hours,Off-desk hours,Total hours')
+    expect(lines[1]).toBe('"Smith, ""Jo""",9am-1pm; 5pm-12am,,,,,,,11,0,11')
+    expect(lines[2]).toBe('Ben,1pm-4pm (off desk),,,,,,,0,3,3')
     expect(lines[3]).toBe('')
   })
 
   it('writes a shift list with 24-hour times', () => {
     const lines = shiftListCsv(saved).slice(1).split('\r\n')
-    expect(lines[0]).toBe('Employee,Date,Day,Start,End,Hours')
-    expect(lines[1]).toBe('"Smith, ""Jo""",2026-09-21,Mon,09:00,13:00,4')
-    expect(lines[2]).toBe('"Smith, ""Jo""",2026-09-21,Mon,17:00,00:00,7')
+    expect(lines[0]).toBe('Employee,Date,Day,Start,End,Hours,Type')
+    expect(lines[1]).toBe('"Smith, ""Jo""",2026-09-21,Mon,09:00,13:00,4,Desk')
+    expect(lines[2]).toBe('Ben,2026-09-21,Mon,13:00,16:00,3,Off desk')
+    expect(lines[3]).toBe('"Smith, ""Jo""",2026-09-21,Mon,17:00,00:00,7,Desk')
   })
 
   it('names files after the project and week', () => {

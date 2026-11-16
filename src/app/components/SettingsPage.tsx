@@ -7,6 +7,7 @@ import { Card } from './ui/Card'
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'shifts', label: 'Shift rules' },
   { id: 'priorities', label: 'Priorities' },
+  { id: 'off-desk', label: 'Off-desk hours' },
 ]
 
 interface SettingsPageProps {
@@ -38,6 +39,7 @@ export function SettingsPage({ project, update, navigate, tab }: SettingsPagePro
       </div>
       {tab === 'shifts' && <ShiftRulesCard project={project} update={update} />}
       {tab === 'priorities' && <ScoringPanel project={project} update={update} />}
+      {tab === 'off-desk' && <OffDeskCard project={project} update={update} />}
     </div>
   )
 }
@@ -68,6 +70,31 @@ function ShiftRulesCard({ project, update }: { project: Project; update: Project
           <NumberField label="Break between blocks (hours)" value={rules.minGapBetweenBlocks} min={1} max={12} onChange={(v) => setRule('minGapBetweenBlocks', v)} />
         </div>
       )}
+    </Card>
+  )
+}
+
+function OffDeskCard({ project, update }: { project: Project; update: ProjectUpdate }) {
+  return (
+    <Card
+      title="Off-desk hours"
+      description="Paid hours away from the desk, from a budget shared by the whole team. They don't count toward coverage."
+    >
+      <div className="fields">
+        <NumberField
+          label="Weekly budget for the whole team (hours)"
+          value={project.offDesk.weeklyBudget}
+          min={0}
+          max={1000}
+          onChange={(v) => update((p) => ({ ...p, offDesk: { ...p.offDesk, weeklyBudget: v } }))}
+        />
+      </div>
+      <p className="hint">
+        When you choose a schedule, the budget is shared among people whose desk shifts leave them below their weekly
+        target, starting with whoever is furthest below. Each person's off-desk hours are placed in times they're
+        available and not at the desk, within the shift rules, at most one off-desk block a day. You can change them on
+        the Schedule page. Set 0 for no off-desk hours.
+      </p>
     </Card>
   )
 }

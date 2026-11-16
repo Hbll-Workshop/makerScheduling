@@ -7,7 +7,7 @@ import type { StepId } from './steps'
  * the whole state.
  */
 export type EmployeeTab = 'details' | 'availability' | 'time-off'
-export type SettingsTab = 'shifts' | 'priorities'
+export type SettingsTab = 'shifts' | 'priorities' | 'off-desk'
 
 export type Route =
   | { page: 'employees' }
@@ -18,7 +18,7 @@ export type Route =
   | { page: 'settings'; tab: SettingsTab }
 
 const EMPLOYEE_TABS: EmployeeTab[] = ['details', 'availability', 'time-off']
-const SETTINGS_TABS: SettingsTab[] = ['shifts', 'priorities']
+const SETTINGS_TABS: SettingsTab[] = ['shifts', 'priorities', 'off-desk']
 
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent)

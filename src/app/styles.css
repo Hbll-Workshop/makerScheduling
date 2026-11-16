@@ -789,3 +789,22 @@ dialog.modal::backdrop { background: rgba(10, 10, 14, 0.4); }
   .calendar-shift-pin { float: none; margin-bottom: 4px; }
 }
 .calendar-shift.person-alt { background-image: repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in srgb, var(--person) 22%, transparent) 4px 6px); }
+
+/* ---------- Off-desk shifts: hollow, dotted, so they never read as desk cover ---------- */
+.shift-chip.is-off-desk { background: var(--surface); border-style: dotted; border-color: var(--text-3); }
+.timeline-bar.is-off-desk {
+  background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1.5px var(--person);
+  background-image: repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in srgb, var(--person) 18%, transparent) 5px 7px);
+}
+.calendar-shift.is-off-desk {
+  background: var(--surface); border: 1.5px dotted var(--person); border-left: 4px dotted var(--person);
+  background-image: repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in srgb, var(--person) 14%, transparent) 5px 7px);
+}
+
+.off-desk-meter { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.off-desk-meter > div { height: 100%; background: var(--ink); border-radius: 999px; }
+.off-desk-meter.is-over > div { background: var(--warning); }
+.off-desk-remove { margin-left: 2px; padding: 0 2px; border: none; background: none; cursor: pointer; color: var(--text-3); vertical-align: middle; line-height: 1; }
+.off-desk-remove:hover { color: var(--text); }
+.off-desk-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.off-desk-chips .shift-chip { margin-bottom: 0; display: inline-flex; align-items: center; }

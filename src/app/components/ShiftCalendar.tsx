@@ -121,13 +121,14 @@ export function ShiftCalendar({ dayLabels, rows, hours }: ShiftCalendarProps) {
                   const range = fmtHourRange(block.startHour, block.endHour)
                   const notes = [
                     `${row.name}, ${dayLabels[day]}, ${range} (${block.endHour - block.startHour}h)`,
+                    block.offDesk && 'Off desk',
                     block.pinned && 'Covers a pinned shift',
                     block.notPreferred && 'Includes hours this employee marked not preferred',
                   ].filter(Boolean)
                   return (
                     <div
                       key={`${row.key}-${block.startHour}`}
-                      className={`calendar-shift ${personClass(row.slot ?? 0)}${block.notPreferred ? ' has-not-preferred' : ''}${block.pinned ? ' is-pinned' : ''}`}
+                      className={`calendar-shift ${personClass(row.slot ?? 0)}${block.notPreferred ? ' has-not-preferred' : ''}${block.pinned ? ' is-pinned' : ''}${block.offDesk ? ' is-off-desk' : ''}`}
                       style={{
                         top: `calc(var(--hour-h) * ${block.startHour - from} + 2px)`,
                         height: `calc(var(--hour-h) * ${block.endHour - block.startHour} - 4px)`,
@@ -140,7 +141,7 @@ export function ShiftCalendar({ dayLabels, rows, hours }: ShiftCalendarProps) {
                       <div className="calendar-shift-body">
                         {block.pinned && <Icon name="pin" size={11} className="calendar-shift-pin" />}
                         <span className="calendar-shift-name">{row.name}</span>
-                        <span className="calendar-shift-time">{range}</span>
+                        <span className="calendar-shift-time">{block.offDesk ? `Off desk · ${range}` : range}</span>
                       </div>
                     </div>
                   )

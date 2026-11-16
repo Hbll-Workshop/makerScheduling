@@ -114,6 +114,27 @@ Cloudflare dashboard:
 Each browser keeps its own autosave (`localStorage`), so two computers using the hosted site
 don't share data. Move a project across with **Save backup file** / **Open backup file**.
 
+## Off-desk hours
+
+There are two kinds of shift. **Desk** shifts are what Generate builds to meet coverage.
+**Off-desk** shifts are paid hours away from the desk, drawn from a fixed weekly budget shared by
+the whole team (**Settings → Off-desk hours**; the same every week, 0 turns it off). They never
+count toward coverage.
+
+When you choose **Use this schedule**, off-desk hours are suggested for everyone the desk
+schedule leaves below their weekly target. The budget goes out an hour at a time to whoever is
+furthest below, so a tight budget narrows the biggest gaps first, and nobody is taken past their
+target. Each person's hours are then placed as timed blocks: only when they're available (time
+off included) and not at the desk, preferred hours first, at most one off-desk block a day,
+within the daily-hours limit, and with any stretch of continuous work within the longest-shift
+limit.
+
+The Schedule page's **Off-desk hours** card shows the budget used and who is still below target.
+Remove a shift with its ×, add one by person, day and time, **Suggest again** to start over from
+the current budget and roster, or **Clear**. Off-desk shifts show dotted and hatched in the
+calendar and are marked in both CSVs (the week grid adds desk, off-desk and total hour columns;
+the shift list adds a Type column).
+
 ## Time off and pins
 
 Availability describes a person's *usual* week. Time off and pins are tied to **calendar dates**

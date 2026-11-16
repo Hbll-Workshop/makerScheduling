@@ -10,6 +10,8 @@ export interface ShiftTableBlock {
   notPreferred?: boolean
   /** Covers a pinned shift. */
   pinned?: boolean
+  /** Off-desk work: paid, but not at the desk and not counted toward coverage. */
+  offDesk?: boolean
 }
 
 export interface ShiftTableRow {
@@ -54,17 +56,19 @@ export function ShiftTable({ dayLabels, rows }: { dayLabels: readonly string[]; 
                       .sort((a, b) => a.startHour - b.startHour)
                       .map((b) => {
                         const notes = [
+                          b.offDesk && 'Off desk',
                           b.pinned && 'Covers a pinned shift',
                           b.notPreferred && 'Includes hours this employee marked not preferred',
                         ].filter(Boolean)
                         return (
                           <span
                             key={b.startHour}
-                            className={`shift-chip${b.notPreferred ? ' has-not-preferred' : ''}${b.pinned ? ' is-pinned' : ''}`}
+                            className={`shift-chip${b.notPreferred ? ' has-not-preferred' : ''}${b.pinned ? ' is-pinned' : ''}${b.offDesk ? ' is-off-desk' : ''}`}
                             title={notes.length ? notes.join('. ') : undefined}
                           >
                             {fmtHourRange(b.startHour, b.endHour)}
                             {b.pinned && <span className="chip-note"> · pinned</span>}
+                            {b.offDesk && <span className="chip-note"> · off desk</span>}
                           </span>
                         )
                       })}

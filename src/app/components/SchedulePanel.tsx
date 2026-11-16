@@ -7,6 +7,7 @@ import {
   savedRows,
   savedScheduleFor,
   setWeekStart,
+  shiftHours,
   type Project,
   type ProjectUpdate,
   type SavedSchedule,
@@ -14,6 +15,7 @@ import {
 import type { Route } from '../routes'
 import { scheduleFileName, shiftListCsv, weekGridCsv } from '../scheduleCsv'
 import { colorSlots } from '../people'
+import { OffDeskPanel } from './OffDeskPanel'
 import { ScheduleShifts } from './ScheduleShifts'
 import { Card } from './ui/Card'
 import { ConfirmDialog } from './ui/ConfirmDialog'
@@ -89,6 +91,9 @@ export function SchedulePanel({ project, update, navigate, onStartNextWeek }: Sc
             </button>
           </div>
         </Card>
+      ) : null}
+      {current ? (
+        <OffDeskPanel key={current.weekStart} project={project} update={update} navigate={navigate} saved={current} />
       ) : (
         <Card title={`No schedule saved for ${formatWeekRange(project.weekStart)}`} description="Generate schedules, then choose “Use this schedule” on the one you want.">
           <div className="row">
@@ -105,13 +110,14 @@ export function SchedulePanel({ project, update, navigate, onStartNextWeek }: Sc
         {others.length > 0 && (
           <ul className="history-list">
             {others.map((saved) => {
-              const hours = saved.shifts.reduce((sum, s) => sum + s.endHour - s.startHour, 0)
+              const hours = shiftHours(saved.shifts)
+              const offDesk = shiftHours(saved.offDesk)
               return (
                 <li key={saved.weekStart} className="history-item">
                   <div className="history-text">
                     <span className="history-week">{formatWeekRange(saved.weekStart)}</span>
                     <span className="hint">
-                      {hours} staff hours · score {score(saved.score)} · saved {savedOn(saved.savedAt)}
+                      {hours} staff hours{offDesk > 0 && ` + ${offDesk} off desk`} · score {score(saved.score)} · saved {savedOn(saved.savedAt)}
                     </span>
                   </div>
                   <div className="history-actions">
@@ -157,7 +163,10 @@ function SavedShifts({ project, saved }: { project: Project; saved: SavedSchedul
         hours: row.hours,
         target: row.targetWeeklyHours,
         slot: slots[i],
-        blocks: row.shifts.map((s) => ({ day: weekDayIndex(saved.weekStart, s.date) ?? 0, startHour: s.startHour, endHour: s.endHour })),
+        blocks: [
+          ...row.shifts.map((s) => ({ day: weekDayIndex(saved.weekStart, s.date) ?? 0, startHour: s.startHour, endHour: s.endHour })),
+          ...row.offDesk.map((s) => ({ day: weekDayIndex(saved.weekStart, s.date) ?? 0, startHour: s.startHour, endHour: s.endHour, offDesk: true })),
+        ],
       }))}
     />
   )

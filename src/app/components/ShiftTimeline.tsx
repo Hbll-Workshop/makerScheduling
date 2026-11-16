@@ -72,17 +72,18 @@ export function ShiftTimeline({ dayLabels, rows, hours }: ShiftTimelineProps) {
                       const range = fmtHourRange(b.startHour, b.endHour)
                       const notes = [
                         `${row.name}, ${dayLabels[day]}, ${range} (${b.endHour - b.startHour}h)`,
+                        b.offDesk && 'Off desk',
                         b.pinned && 'Covers a pinned shift',
                         b.notPreferred && 'Includes hours this employee marked not preferred',
                       ].filter(Boolean)
                       return (
                         <span
                           key={`${row.key}-${b.startHour}`}
-                          className={`timeline-bar ${personClass(row.slot ?? 0)}${b.notPreferred ? ' has-not-preferred' : ''}${b.pinned ? ' is-pinned' : ''}`}
+                          className={`timeline-bar ${personClass(row.slot ?? 0)}${b.notPreferred ? ' has-not-preferred' : ''}${b.pinned ? ' is-pinned' : ''}${b.offDesk ? ' is-off-desk' : ''}`}
                           style={{ gridColumn: `${column(b.startHour)} / ${column(b.endHour)}`, gridRow: lane + 1 }}
                           title={notes.join('. ')}
                         >
-                          <span className="timeline-name">{row.name}</span> {range}
+                          <span className="timeline-name">{row.name}</span> {b.offDesk ? `off desk ${range}` : range}
                         </span>
                       )
                     }),

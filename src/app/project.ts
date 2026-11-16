@@ -15,6 +15,7 @@ import {
 } from '../core/calendar'
 import { ConfigError, DEFAULT_CONFIG, validateProblem } from '../core/config'
 import type { Scenario } from '../core/io'
+import { suggestOffDesk } from '../core/offDesk'
 import { normaliseRuleSettings, type RuleSetting } from '../core/rules/catalog'
 import {
   Availability,
@@ -27,6 +28,7 @@ import {
   type OperatingWindow,
   type Schedule,
   type ScheduleConfig,
+  type ShiftBlock,
 } from '../core/types'
 
 /**
@@ -58,7 +60,16 @@ export interface Project {
    * earlier entry at all, everyone works. Storing who is *out* means new hires start in.
    */
   excluded: Record<IsoDate, string[]>
+  offDesk: OffDeskSettings
 }
+
+/** Off-desk work: paid hours away from the desk, from a budget shared by the whole team. */
+export interface OffDeskSettings {
+  /** Off-desk hours the whole team may use each week. The same every week. */
+  weeklyBudget: number
+}
+
+export const DEFAULT_OFF_DESK: OffDeskSettings = { weeklyBudget: 0 }
 
 /**
  * A schedule someone chose to use for a week. Stored as dated shifts with names copied in, so
@@ -72,6 +83,11 @@ export interface SavedSchedule {
   /** Everyone on the roster when it was saved, in roster order — including anyone with no shifts. */
   team: SavedMember[]
   shifts: SavedShift[]
+  /**
+   * Off-desk shifts, which don't count toward coverage. Suggested when the schedule is saved and
+   * editable afterwards. Never overlap the same person's desk shifts or each other.
+   */
+  offDesk: SavedShift[]
 }
 
 export interface SavedMember {
@@ -190,6 +206,7 @@ export function projectFromScenario(scenario: Scenario, search = DEFAULT_SEARCH,
     search: { ...search },
     saved: [],
     excluded: {},
+    offDesk: { ...DEFAULT_OFF_DESK },
   }
 }
 
@@ -534,37 +551,124 @@ export function savedScheduleFor(project: Project, weekStart: IsoDate): SavedSch
  * employee order, which later edits may have changed.
  */
 export function saveWeekSchedule(project: Project, solved: Project, schedule: Schedule, now = new Date()): Project {
-  const shifts: SavedShift[] = []
   const working = workingEmployees(solved)
-  working.forEach((employee, e) => {
-    for (const block of schedule.blocks[e] ?? []) {
-      shifts.push({
-        employeeId: employee.id,
-        employeeName: employee.name,
-        date: addDays(solved.weekStart, block.day),
-        startHour: block.startHour,
-        endHour: block.endHour,
-      })
-    }
-  })
-  shifts.sort((a, b) => a.date.localeCompare(b.date) || a.startHour - b.startHour || a.employeeName.localeCompare(b.employeeName))
+  const shifts = toSavedShifts(solved.weekStart, working, schedule.blocks)
   const team = working.map((e) => ({ employeeId: e.id, employeeName: e.name, targetWeeklyHours: e.targetWeeklyHours }))
-  const entry: SavedSchedule = { weekStart: solved.weekStart, savedAt: now.toISOString(), score: schedule.score, team, shifts }
+  // Off-desk hours are suggested straight away, from today's budget: changing the budget doesn't
+  // make generated schedules stale, so `solved` may predate it.
+  const { employees, config } = projectToProblem(solved)
+  const offDesk = toSavedShifts(
+    solved.weekStart,
+    working,
+    suggestOffDesk({ employees, desk: schedule.blocks, budget: project.offDesk.weeklyBudget, limits: config }),
+  )
+  const entry: SavedSchedule = { weekStart: solved.weekStart, savedAt: now.toISOString(), score: schedule.score, team, shifts, offDesk }
   const saved = [...project.saved.filter((s) => s.weekStart !== solved.weekStart), entry]
   saved.sort((a, b) => a.weekStart.localeCompare(b.weekStart))
   return { ...project, saved }
 }
 
+/** Blocks per person (in `people` order) as dated shifts, sorted like a saved schedule's. */
+function toSavedShifts(weekStart: IsoDate, people: readonly { id: string; name: string }[], blocks: readonly (readonly ShiftBlock[])[]): SavedShift[] {
+  const shifts: SavedShift[] = []
+  people.forEach((person, i) => {
+    for (const block of blocks[i] ?? []) {
+      shifts.push({ employeeId: person.id, employeeName: person.name, date: addDays(weekStart, block.day), startHour: block.startHour, endHour: block.endHour })
+    }
+  })
+  return sortShifts(shifts)
+}
+
+const sortShifts = (shifts: SavedShift[]) =>
+  shifts.sort((a, b) => a.date.localeCompare(b.date) || a.startHour - b.startHour || a.employeeName.localeCompare(b.employeeName))
+
 export function removeSavedSchedule(project: Project, weekStart: IsoDate): Project {
   return { ...project, saved: project.saved.filter((s) => s.weekStart !== weekStart) }
 }
 
-/** One row per team member of a saved schedule, in roster order, with their shifts and total hours. */
-export function savedRows(saved: SavedSchedule): (SavedMember & { shifts: SavedShift[]; hours: number })[] {
+export interface SavedRow extends SavedMember {
+  shifts: SavedShift[]
+  offDesk: SavedShift[]
+  deskHours: number
+  offDeskHours: number
+  /** Desk plus off-desk. */
+  hours: number
+}
+
+export const shiftHours = (shifts: readonly SavedShift[]) => shifts.reduce((sum, s) => sum + s.endHour - s.startHour, 0)
+
+/** One row per team member of a saved schedule, in roster order, with their shifts and hours. */
+export function savedRows(saved: SavedSchedule): SavedRow[] {
   return saved.team.map((member) => {
     const shifts = saved.shifts.filter((s) => s.employeeId === member.employeeId)
-    return { ...member, shifts, hours: shifts.reduce((sum, s) => sum + s.endHour - s.startHour, 0) }
+    const offDesk = saved.offDesk.filter((s) => s.employeeId === member.employeeId)
+    const deskHours = shiftHours(shifts)
+    const offDeskHours = shiftHours(offDesk)
+    return { ...member, shifts, offDesk, deskHours, offDeskHours, hours: deskHours + offDeskHours }
   })
+}
+
+// ---------------------------------------------------------------------------
+// Off-desk hours on a saved schedule.
+// ---------------------------------------------------------------------------
+
+function withSaved(project: Project, weekStart: IsoDate, change: (s: SavedSchedule) => SavedSchedule): Project {
+  return { ...project, saved: project.saved.map((s) => (s.weekStart === weekStart ? change(s) : s)) }
+}
+
+/**
+ * Fresh off-desk suggestions for a saved week, replacing whatever it had. Uses the roster as it is
+ * now (availability, time off, targets), for team members who are still on it.
+ */
+export function resuggestOffDesk(project: Project, weekStart: IsoDate): Project {
+  const saved = savedScheduleFor(project, weekStart)
+  if (!saved) return project
+  const atWeek = { ...project, weekStart }
+  const { employees: resolved, config } = projectToProblem({ ...atWeek, excluded: {} })
+  const byId = new Map(resolved.map((e) => [e.id, e]))
+  const members = saved.team.filter((m) => byId.has(m.employeeId))
+  const employees = members.map((m) => byId.get(m.employeeId)!)
+  const desk = members.map((m) => blocksOf(weekStart, saved.shifts.filter((s) => s.employeeId === m.employeeId)))
+  const blocks = suggestOffDesk({ employees, desk, budget: project.offDesk.weeklyBudget, limits: config })
+  const people = members.map((m) => ({ id: m.employeeId, name: m.employeeName }))
+  return withSaved(project, weekStart, (s) => ({ ...s, offDesk: toSavedShifts(weekStart, people, blocks) }))
+}
+
+function blocksOf(weekStart: IsoDate, shifts: readonly SavedShift[]): ShiftBlock[] {
+  return shifts.flatMap((s) => {
+    const day = weekDayIndex(weekStart, s.date)
+    return day === null ? [] : [{ day, startHour: s.startHour, endHour: s.endHour }]
+  })
+}
+
+export function clearOffDesk(project: Project, weekStart: IsoDate): Project {
+  return withSaved(project, weekStart, (s) => ({ ...s, offDesk: [] }))
+}
+
+/** Why an off-desk shift can't be added to a saved week, or `null` if it can. */
+export function offDeskConflict(saved: SavedSchedule, shift: Omit<SavedShift, 'employeeName'>): string | null {
+  if (weekDayIndex(saved.weekStart, shift.date) === null) return 'That date is outside this week.'
+  if (!(shift.startHour >= 0 && shift.startHour < shift.endHour && shift.endHour <= HOURS_PER_DAY)) return 'The end must be after the start.'
+  const overlaps = (s: SavedShift) =>
+    s.employeeId === shift.employeeId && s.date === shift.date && s.startHour < shift.endHour && shift.startHour < s.endHour
+  if (saved.shifts.some(overlaps)) return 'That overlaps one of their desk shifts.'
+  if (saved.offDesk.some(overlaps)) return 'That overlaps another of their off-desk shifts.'
+  return null
+}
+
+/** Adds an off-desk shift to a saved week; ignored if {@link offDeskConflict} finds a problem. */
+export function addOffDeskShift(project: Project, weekStart: IsoDate, shift: SavedShift): Project {
+  const saved = savedScheduleFor(project, weekStart)
+  if (!saved || offDeskConflict(saved, shift) !== null) return project
+  return withSaved(project, weekStart, (s) => ({ ...s, offDesk: sortShifts([...s.offDesk, { ...shift }]) }))
+}
+
+/** Removes the off-desk shift starting at `startHour` on `date` for that person. */
+export function removeOffDeskShift(project: Project, weekStart: IsoDate, employeeId: string, date: IsoDate, startHour: number): Project {
+  return withSaved(project, weekStart, (s) => ({
+    ...s,
+    offDesk: s.offDesk.filter((x) => !(x.employeeId === employeeId && x.date === date && x.startHour === startHour)),
+  }))
 }
 
 // ---------------------------------------------------------------------------
@@ -629,6 +733,8 @@ const isSavedMember = (value: unknown): value is SavedMember => {
   return typeof v === 'object' && v !== null && typeof v.employeeId === 'string' && typeof v.employeeName === 'string' && Number.isFinite(v.targetWeeklyHours)
 }
 
+const copyShift = ({ employeeId, employeeName, date, startHour, endHour }: SavedShift): SavedShift => ({ employeeId, employeeName, date, startHour, endHour })
+
 /** Saved schedules from storage, or `null` if any is malformed. A missing list is an older save: empty. */
 function normaliseSaved(raw: unknown): SavedSchedule[] | null {
   if (raw === undefined) return []
@@ -641,12 +747,15 @@ function normaliseSaved(raw: unknown): SavedSchedule[] | null {
     if (typeof s.savedAt !== 'string' || !Number.isFinite(s.score)) return null
     if (!Array.isArray(s.shifts) || !s.shifts.every(isSavedShift)) return null
     if (!Array.isArray(s.team) || !s.team.every(isSavedMember)) return null
+    const offDesk = s.offDesk ?? []
+    if (!Array.isArray(offDesk) || !offDesk.every(isSavedShift)) return null
     out.push({
       weekStart: s.weekStart,
       savedAt: s.savedAt,
       score: s.score!,
       team: s.team.map(({ employeeId, employeeName, targetWeeklyHours }) => ({ employeeId, employeeName, targetWeeklyHours })),
-      shifts: s.shifts.map(({ employeeId, employeeName, date, startHour, endHour }) => ({ employeeId, employeeName, date, startHour, endHour })),
+      shifts: s.shifts.map(copyShift),
+      offDesk: offDesk.map(copyShift),
     })
   }
   return out.sort((a, b) => a.weekStart.localeCompare(b.weekStart))
@@ -707,7 +816,14 @@ export function normaliseProject(raw: unknown, today = todayIso()): Project | nu
     search: { ...DEFAULT_SEARCH, ...p.search },
     saved,
     excluded,
+    offDesk: normaliseOffDesk(p.offDesk),
   }
+}
+
+/** Off-desk settings from storage; missing or nonsense values fall back to no budget. */
+function normaliseOffDesk(raw: unknown): OffDeskSettings {
+  const budget = (raw as Partial<OffDeskSettings> | null)?.weeklyBudget
+  return { weeklyBudget: Number.isInteger(budget) && budget! >= 0 ? budget! : DEFAULT_OFF_DESK.weeklyBudget }
 }
 
 /** Storage can be missing or throw (private windows, blocked site data) — treat that as empty. */
