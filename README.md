@@ -33,7 +33,8 @@ foot of each step move along, and a step gets a check mark once it's done.
    across the grid; **Closed** (0) marks hours nobody is needed. Opening hours follow from it: each
    day opens at its first hour needing someone and closes after its last.
 3. **Generate** — one click finds the best few schedules (10 by default), with a **Search time**
-   of Quick, Normal or Thorough. Pick an option to see its shifts, where its points went, and
+   of Quick, Normal or Thorough. The search stops early once 25 seconds pass without a better
+   schedule turning up (changeable, or off, under **Advanced**). Pick an option to see its shifts, where its points went, and
    staffing by hour, then choose **Use this schedule**. Shifts show as a **Timeline** (hours
    across the top, one bar per shift in that person's colour) or as a **Table** of people by day. Under **Advanced**, the original mode keeps
    every schedule above a minimum score, with **Find achievable score** to pick that minimum.

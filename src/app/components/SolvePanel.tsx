@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { SearchReport } from '../../core/report'
-import { solveKey, type Project, type ProjectUpdate } from '../project'
+import { DEFAULT_SEARCH, solveKey, type Project, type ProjectUpdate } from '../project'
 import type { Route } from '../routes'
 import type { SolvedRun, useSolver } from '../useSolver'
 import { NumberField } from './NumberField'
@@ -24,6 +24,8 @@ function stopDescription(report: SearchReport): string {
   switch (report.stopReason) {
     case 'timeBudget':
       return 'the time limit'
+    case 'stalled':
+      return 'a stretch with no improvement'
     case 'nodeBudget':
       return 'the step limit'
     default:
@@ -124,6 +126,24 @@ export function SolvePanel({ project, update, solver, problems, navigate, onUseS
               <NumberField label="Options to keep" value={search.maxResults} min={1} max={1000} onChange={(v) => setSearch({ maxResults: v })} />
               <NumberField label="Search time (seconds)" value={search.timeLimitSeconds} min={1} max={600} onChange={(v) => setSearch({ timeLimitSeconds: v })} />
             </div>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                role="switch"
+                className="switch"
+                checked={search.stallSeconds !== null}
+                onChange={(e) => setSearch({ stallSeconds: e.target.checked ? DEFAULT_SEARCH.stallSeconds : null })}
+              />
+              <span className="toggle-text">
+                <span className="toggle-label">Stop early when the search stops improving</span>
+                <span className="toggle-hint">Ends the search once no better schedule has turned up for a while, instead of using all the search time.</span>
+              </span>
+            </label>
+            {search.stallSeconds !== null && (
+              <div className="fields nested">
+                <NumberField label="Stop after no improvement for (seconds)" value={search.stallSeconds} min={1} max={600} onChange={(v) => setSearch({ stallSeconds: v })} />
+              </div>
+            )}
             <label className="toggle">
               <input type="checkbox" role="switch" className="switch" checked={search.useThreshold} onChange={(e) => setSearch({ useThreshold: e.target.checked })} />
               <span className="toggle-text">
@@ -314,6 +334,14 @@ function summarise(run: SolvedRun): { tone: 'good' | 'warning'; title: string; d
             title: 'No schedule found in time',
             detail: 'Try Thorough, or check that enough people are available for the staff needed.',
           }
+    }
+    if (report.stopReason === 'stalled') {
+      const stall = run.project.search.stallSeconds
+      return {
+        tone: 'good',
+        title: `Stopped after ${stall}s without finding a better schedule — here are the best ${n(count)}`,
+        detail: `Better ones may still exist, but more searching was unlikely to find them soon. Turn off "Stop early" under Advanced to use the whole search time.`,
+      }
     }
     return report.complete
       ? {

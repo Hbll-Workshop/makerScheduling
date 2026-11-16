@@ -94,3 +94,45 @@ describe('solveWithRestarts', () => {
     expect(progress.at(-1)!.pass).toBe(report.passes)
   })
 })
+
+describe('stopping when the search stalls', () => {
+  it('records when the kept set last gained a schedule, ignoring rejects and repeats', async () => {
+    const pool = new TopKSchedules(1)
+    expect(pool.lastImprovedAt).toBeNull()
+    pool.offer(fake([1], 50))
+    const first = pool.lastImprovedAt!
+    expect(first).toBeGreaterThan(0)
+    await new Promise((r) => setTimeout(r, 5))
+    pool.offer(fake([2], 40)) // worse: rejected
+    pool.offer(fake([1], 50)) // repeat
+    expect(pool.lastImprovedAt).toBe(first)
+    pool.offer(fake([3], 60))
+    expect(pool.lastImprovedAt!).toBeGreaterThan(first)
+  })
+
+  it('ends a single search long before its time limit once nothing better turns up', () => {
+    const { employees, config } = loadFixture('medium-shop.json')
+    const { schedules, report } = solve(employees, config, {
+      threshold: -Infinity, tightenToBest: true, maxResults: 10, maxMillis: 30_000, maxNodes: Infinity, stallMillis: 300,
+    })
+    expect(report.stopReason).toBe('stalled')
+    expect(report.complete).toBe(false)
+    expect(report.elapsedMs).toBeLessThan(10_000)
+    expect(schedules.length).toBe(10)
+  })
+
+  it('carries the stall clock across restart passes and stops them all', () => {
+    const { employees, config } = loadFixture('medium-shop.json')
+    const { report } = solveWithRestarts(employees, config, {
+      threshold: -Infinity, maxResults: 10, maxMillis: 30_000, maxNodes: Infinity, stallMillis: 500,
+    })
+    expect(report.stopReason).toBe('stalled')
+    expect(report.elapsedMs).toBeLessThan(15_000)
+  })
+
+  it('leaves a search that finishes quickly to finish, and reports it complete', () => {
+    const { employees, config } = loadFixture('small-cafe.json')
+    const { report } = solveWithRestarts(employees, config, { threshold: -Infinity, maxResults: 5, maxNodes: Infinity, stallMillis: 5000 })
+    expect(report.complete).toBe(true)
+  })
+})

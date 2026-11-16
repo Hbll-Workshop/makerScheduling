@@ -121,6 +121,11 @@ export interface SearchSettings {
    * On: keep schedules scoring at least `threshold` (the original, exhaustive mode).
    */
   useThreshold: boolean
+  /**
+   * Stop early once this many seconds pass without a better schedule being found; `null` to always
+   * use the whole search time.
+   */
+  stallSeconds: number | null
 }
 
 export const DEFAULT_SEARCH: SearchSettings = {
@@ -129,6 +134,7 @@ export const DEFAULT_SEARCH: SearchSettings = {
   maxNodes: null,
   tightenToBest: false,
   useThreshold: false,
+  stallSeconds: 25,
 }
 
 export function newId(): string {

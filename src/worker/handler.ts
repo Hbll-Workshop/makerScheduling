@@ -20,6 +20,7 @@ export function handleRequest(request: SolveRequest, post: (response: SolveRespo
       rules: buildRules(project.rules),
       maxMillis: project.search.timeLimitSeconds * 1000,
       maxNodes: project.search.maxNodes ?? Infinity,
+      stallMillis: project.search.stallSeconds === null ? Infinity : project.search.stallSeconds * 1000,
       onProgress: (progress: SearchProgress) => post({ type: 'progress', runId, progress }),
     }
 

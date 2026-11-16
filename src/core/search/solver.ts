@@ -33,6 +33,12 @@ export interface SolveOptions {
   /** Wall-clock budget in ms. `Infinity` for no limit. Default 30,000. */
   maxMillis?: number
   /**
+   * Stop once this many ms pass without a new schedule entering the results (counted from the
+   * first one found, so a search still looking for any schedule is never cut short). `Infinity`
+   * to never stop for this. Default `Infinity`.
+   */
+  stallMillis?: number
+  /**
    * Once `maxResults` schedules are held, raise the effective pruning floor to the weakest
    * one retained. Dramatically faster, but it changes what "complete" proves: the top-K set
    * rather than *every* schedule above the threshold. Off by default.
@@ -112,6 +118,7 @@ function searchOnce(ctx: ProblemContext, options: SolveOptions, results: TopKSch
     rules = defaultRules(),
     maxNodes = 5_000_000,
     maxMillis = 30_000,
+    stallMillis = Infinity,
     tightenToBest = false,
     assertBoundsExact = false,
     ordering = 'day-major',
@@ -174,6 +181,10 @@ function searchOnce(ctx: ProblemContext, options: SolveOptions, results: TopKSch
       const now = Date.now()
       if (now - startedAt >= maxMillis) {
         stopReason = 'timeBudget'
+        return true
+      }
+      if (results.lastImprovedAt !== null && now - results.lastImprovedAt >= stallMillis) {
+        stopReason = 'stalled'
         return true
       }
       if (onProgress && now - lastProgressAt >= progressIntervalMs) reportProgress(now)
@@ -301,6 +312,8 @@ const SECOND_PASS_SHARE = 1 / 16
  * each starts already pruning against the best found so far, and a schedule found twice is kept
  * once.
  *
+ * With `stallMillis`, the stall clock runs across passes: a pass that adds nothing doesn't reset it.
+ *
  * Optimising only: always tightens to the best (`tightenToBest`). If any pass runs to the end,
  * the best `maxResults` are proven, exactly as for a single complete search, since a complete pass
  * proves it whatever order it searched in, and the search stops there.
@@ -361,7 +374,7 @@ export function solveWithRestarts(
     const kept = results.drain()[0]
     if (kept) best = kept.score
 
-    if (report.complete || report.stopReason === 'aborted' || report.stopReason === 'nodeBudget') break
+    if (report.complete || report.stopReason !== 'timeBudget') break
     slice = pass === 1 ? Math.max(MIN_PASS_MS, maxMillis * SECOND_PASS_SHARE) : slice * 2
   }
 

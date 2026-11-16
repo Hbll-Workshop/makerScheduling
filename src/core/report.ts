@@ -15,6 +15,8 @@ export class TopKSchedules {
   private dropped = 0
   /** Keys of retained schedules, so a schedule reached again by a later search pass isn't kept twice. */
   private keys = new Set<string>()
+  /** When the retained set last gained a schedule (`Date.now()`), or `null` while empty. */
+  lastImprovedAt: number | null = null
 
   constructor(readonly capacity: number) {
     if (capacity < 1) throw new Error('TopKSchedules capacity must be at least 1')
@@ -40,6 +42,7 @@ export class TopKSchedules {
       this.heap.push(schedule)
       this.keys.add(key)
       this.siftUp(this.heap.length - 1)
+      this.lastImprovedAt = Date.now()
       return
     }
     this.dropped++
@@ -48,6 +51,7 @@ export class TopKSchedules {
     this.heap[0] = schedule
     this.keys.add(key)
     this.siftDown(0)
+    this.lastImprovedAt = Date.now()
   }
 
   /** Retained schedules, best score first. */
@@ -83,7 +87,7 @@ export class TopKSchedules {
 
 const keyOf = (schedule: Schedule) => schedule.patternIndices.join(',')
 
-export type StopReason = 'exhausted' | 'nodeBudget' | 'timeBudget' | 'aborted'
+export type StopReason = 'exhausted' | 'nodeBudget' | 'timeBudget' | 'stalled' | 'aborted'
 
 export interface SearchReport {
   /**
@@ -169,6 +173,8 @@ function describeStop(reason: StopReason): string {
       return 'the node budget'
     case 'timeBudget':
       return 'the time budget'
+    case 'stalled':
+      return 'no improvement for the stall limit'
     case 'aborted':
       return 'caller abort'
     case 'exhausted':
