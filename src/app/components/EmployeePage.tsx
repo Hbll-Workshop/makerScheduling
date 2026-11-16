@@ -8,7 +8,7 @@ import {
   excludedFor,
   isOpen,
   newId,
-  openSlots,
+  fillEmptyOpenHours,
   paintGrid,
   setPinnedHour,
   setWorking,
@@ -201,11 +201,17 @@ function AvailabilityTab({ project, update, employee }: TabProps) {
           }))}
         />
         <div className="toolbar-actions">
-          <button type="button" className="btn btn--ghost btn--sm" onClick={() => update((p) => {
-            const current = p.employees.find((e) => e.id === employee.id)
-            return current ? updateEmployee(p, employee.id, { availability: paintGrid(current.availability, openSlots(p), brush) }) : p
-          })}>
-            Set open hours to {levelName(brush).toLowerCase()}
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            title="Fills open hours that aren't marked yet. Hours you've already set stay as they are."
+            disabled={brush === Availability.Unavailable}
+            onClick={() => update((p) => {
+              const current = p.employees.find((e) => e.id === employee.id)
+              return current ? updateEmployee(p, employee.id, { availability: fillEmptyOpenHours(p, current.availability, brush) }) : p
+            })}
+          >
+            Fill empty open hours with {levelName(brush).toLowerCase()}
           </button>
           <button
             type="button"

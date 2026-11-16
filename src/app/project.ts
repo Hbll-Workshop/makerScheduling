@@ -388,6 +388,11 @@ export function openSlots(project: Project): number[] {
   return slots
 }
 
+/** Open hours someone hasn't marked yet (still unavailable), set to `value`. Hours already marked keep their level. */
+export function fillEmptyOpenHours(project: Project, availability: readonly number[], value: number): number[] {
+  return paintGrid(availability, openSlots(project).filter((slot) => availability[slot] === Availability.Unavailable), value)
+}
+
 export function newEmployee(project: Project): ProjectEmployee {
   const availability = new Array<number>(WEEK_HOURS).fill(Availability.Unavailable)
   for (const slot of openSlots(project)) availability[slot] = Availability.Preferred

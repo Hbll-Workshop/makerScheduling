@@ -5,7 +5,9 @@ import { parseRoute, routeHash, type Route } from '../src/app/routes'
 import {
   copyDayCoverage,
   excludedFor,
+  fillEmptyOpenHours,
   normaliseProject,
+  openSlots,
   paintCoverage,
   projectFromScenario,
   projectToProblem,
@@ -346,5 +348,19 @@ describe('theme', () => {
     expect(loadTheme(undefined)).toBe('system')
     expect(loadTheme({ getItem: () => 'sepia' })).toBe('system')
     expect(loadTheme({ getItem: () => { throw new Error('blocked') } })).toBe('system')
+  })
+})
+
+describe('filling empty open hours', () => {
+  it('fills only open hours that are still unavailable', () => {
+    const project = cafe()
+    const open = openSlots(project)
+    const grid = new Array<number>(168).fill(0)
+    grid[open[0]] = 1 // already marked not preferred
+    const closed = Array.from({ length: 168 }, (_, i) => i).find((i) => !open.includes(i))!
+    const next = fillEmptyOpenHours(project, grid, 2)
+    expect(next[open[0]]).toBe(1)
+    expect(open.slice(1).every((slot) => next[slot] === 2)).toBe(true)
+    expect(next[closed]).toBe(0)
   })
 })
